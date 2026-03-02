@@ -1,0 +1,8 @@
+**/.yarn
+**/.next
+**/.out
+**/dist
+**/build
+**/.tmp
+**/.cache
+**/.turbo

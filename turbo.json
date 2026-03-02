@@ -1,0 +1,30 @@
+{
+    "$schema": "https://turbo.build/schema.json",
+    "tasks": {
+        "test": {},
+        "test-unit": {},
+        "dev": {
+            "cache": false
+        },
+        "start": {
+            "cache": false,
+            "persistent": true
+        },
+        "build": {
+            "dependsOn": ["^build"],
+            "inputs": ["$TURBO_DEFAULT$", ".env*"],
+            "outputs": ["dist", ".next/**", "!.next/cache/**"]
+        },
+        "lint": {
+            "env": ["TIMING"]
+        },
+        "typecheck": {},
+        "clean": {
+            "cache": false
+        },
+        "build-faqs-web": {
+            "dependsOn": ["faqs-web#build"],
+            "cache": false
+        }
+    }
+}

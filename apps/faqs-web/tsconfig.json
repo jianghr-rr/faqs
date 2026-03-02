@@ -1,0 +1,40 @@
+{
+    "$schema": "https://json.schemastore.org/tsconfig",
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "baseUrl": ".",
+        "target": "ES2022",
+        "module": "ES2022",
+        "moduleResolution": "bundler",
+        "strict": true,
+        "strictNullChecks": true,
+        "incremental": true,
+        "lib": ["dom", "dom.iterable", "ES2022"],
+        "jsx": "preserve",
+        "paths": {
+            "~/*": ["./*"],
+            "~app/*": ["./app/*"],
+            "~lib/*": ["./lib/*"],
+            "~utils/*": ["./utils/*"],
+            "~components/*": ["./components/*"],
+            "~ui/*": ["./components/ui/*"],
+            "~types/*": ["./types/*"],
+            "~store/*": ["./store/*"],
+            "~dal/*": ["./dal/*"],
+            "~dto/*": ["./dto/*"]
+        },
+        "plugins": [{"name": "next"}]
+    },
+    "exclude": ["**/node_modules", "**/.*/*", "./components/ui"],
+    "include": [
+        "next-env.d.ts",
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.mts",
+        "**/*.js",
+        "**/*.mjs",
+        "**/*.jsx",
+        "**/*.json",
+        ".next/types/**/*.ts"
+    ]
+}

@@ -1,0 +1,46 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+.next
+.out
+dist
+build
+
+# Cache
+.tmp
+.cache
+.turbo
+*.tsbuildinfo
+
+# Environment
+.env
+.env*.local
+
+# Logs
+logs/
+*.log
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test / Coverage
+coverage/
+.nyc_output/
+.vitest/
+
+# Vercel
+.vercel/
+
+# Cursor
+.cursor/
