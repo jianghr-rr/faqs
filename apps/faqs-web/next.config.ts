@@ -1,6 +1,6 @@
 import type {NextConfig} from 'next';
 
-const isProd = process.env.NODE_ENV === 'production';
+const apiBaseUrl = process.env.API_BASE_URL ?? 'http://localhost:8080';
 
 const nextConfig: NextConfig = {
     output: 'standalone',
@@ -21,9 +21,7 @@ const nextConfig: NextConfig = {
         return [
             {
                 source: '/api/:path*',
-                destination: isProd
-                    ? 'http://your-production-api:8080/:path*'
-                    : 'http://localhost:8080/:path*',
+                destination: `${apiBaseUrl}/:path*`,
             },
         ];
     },

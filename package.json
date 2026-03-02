@@ -45,7 +45,6 @@
     "pnpm": {
         "onlyBuiltDependencies": [
             "husky",
-            "bcrypt",
             "esbuild",
             "sharp"
         ]

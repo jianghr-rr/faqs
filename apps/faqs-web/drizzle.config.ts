@@ -1,24 +1,20 @@
+import {existsSync} from 'node:fs';
 import {defineConfig} from 'drizzle-kit';
 
-if (
-    !process.env.MYSQL_HOST ||
-    !process.env.MYSQL_PORT ||
-    !process.env.MYSQL_USER ||
-    !process.env.MYSQL_PASSWORD ||
-    !process.env.MYSQL_DATABASE
-) {
-    throw new Error('Missing MySQL configuration environment variables');
+if (existsSync('.env.local')) {
+    // loadEnvFile is available in Node 20.12+
+    (process as unknown as {loadEnvFile: (path: string) => void}).loadEnvFile('.env.local');
+}
+
+if (!process.env.DIRECT_URL) {
+    throw new Error('Missing DIRECT_URL environment variable for database migrations');
 }
 
 export default defineConfig({
     schema: './db/schema.ts',
     out: './db/migrations',
-    dialect: 'mysql',
+    dialect: 'postgresql',
     dbCredentials: {
-        host: process.env.MYSQL_HOST,
-        port: Number(process.env.MYSQL_PORT),
-        user: process.env.MYSQL_USER,
-        password: process.env.MYSQL_PASSWORD,
-        database: process.env.MYSQL_DATABASE,
+        url: process.env.DIRECT_URL,
     },
 });
