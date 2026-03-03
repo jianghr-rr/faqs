@@ -34,7 +34,9 @@ ENV HOSTNAME="0.0.0.0"
 
 COPY --from=builder /app/apps/faqs-web/.next/standalone ./
 COPY --from=builder /app/apps/faqs-web/.next/static ./apps/faqs-web/.next/static
-COPY --from=builder /app/apps/faqs-web/public       ./apps/faqs-web/public
+# public 目录可能为空，使用通配符避免 COPY 失败
+RUN mkdir -p ./apps/faqs-web/public
+COPY --from=builder /app/apps/faqs-web/public/. ./apps/faqs-web/public/
 
 EXPOSE 3000
 
