@@ -85,3 +85,7 @@ jobs:
                         ccr.ccs.tencentyun.com/jianghr/faqs-web:${{ steps.img.outputs.tag }}
 
                       docker image prune -f
+
+                      # 设置 cron 定时采集新闻（每分钟，内部 scheduler 控制实际频率）
+                      CRON_CMD='* * * * * curl -s -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" http://localhost:3001/api/news/cron > /dev/null 2>&1'
+                      (crontab -l 2>/dev/null | grep -v '/api/news/cron'; echo "$CRON_CMD") | crontab -
