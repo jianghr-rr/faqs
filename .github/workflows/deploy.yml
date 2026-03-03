@@ -79,7 +79,9 @@ jobs:
                         -e DIRECT_URL='${{ secrets.DIRECT_URL }}' \
                         -e API_BASE_URL='${{ secrets.API_BASE_URL }}' \
                         -e NEXT_PUBLIC_APP_URL='${{ secrets.NEXT_PUBLIC_APP_URL }}' \
-                      -e APP_ORIGIN='${{ secrets.NEXT_PUBLIC_APP_URL }}' \
+                        -e APP_ORIGIN='${{ secrets.NEXT_PUBLIC_APP_URL }}' \
+                        -e FINNHUB_API_KEY='${{ secrets.FINNHUB_API_KEY }}' \
+                        -e CRON_SECRET='${{ secrets.CRON_SECRET }}' \
                         ccr.ccs.tencentyun.com/jianghr/faqs-web:${{ steps.img.outputs.tag }}
 
                       docker image prune -f
