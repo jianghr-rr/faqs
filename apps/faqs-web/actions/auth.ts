@@ -5,9 +5,8 @@ import {headers} from 'next/headers';
 import {createClient} from '~/lib/supabase/server';
 
 function getOrigin(headersList: Awaited<ReturnType<typeof headers>>): string {
-    if (process.env.NEXT_PUBLIC_APP_URL) {
-        return process.env.NEXT_PUBLIC_APP_URL;
-    }
+    const appUrl = process.env.APP_ORIGIN ?? process.env.NEXT_PUBLIC_APP_URL;
+    if (appUrl) return appUrl;
     const origin = headersList.get('origin');
     if (origin) return origin;
     const host = headersList.get('x-forwarded-host') ?? headersList.get('host') ?? 'localhost:3000';
