@@ -1,0 +1,190 @@
+'use client';
+
+import {useState, useCallback, useEffect, useRef} from 'react';
+import {Loader2, RefreshCw} from 'lucide-react';
+import {NewsCard} from './news-card';
+
+type NewsCategory = '要闻' | '宏观' | '研报' | '策略' | 'AI洞察' | '数据';
+
+interface NewsItem {
+    id: string;
+    title: string;
+    summary: string | null;
+    category: string;
+    source: string;
+    sourceUrl: string | null;
+    publishedAt: string;
+    sentiment: string | null;
+    sentimentScore: string | null;
+    tickers: string[] | null;
+    tags: string[] | null;
+    importance: number;
+    isAiGenerated: boolean;
+    imageUrl: string | null;
+    relatedCount?: number;
+}
+
+interface NewsResponse {
+    items: NewsItem[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+}
+
+const CATEGORIES: Array<{label: string; value: NewsCategory | null}> = [
+    {label: '全部', value: null},
+    {label: '要闻', value: '要闻'},
+    {label: '宏观', value: '宏观'},
+    {label: '研报', value: '研报'},
+    {label: '策略', value: '策略'},
+    {label: 'AI洞察', value: 'AI洞察'},
+    {label: '数据', value: '数据'},
+];
+
+const POLL_INTERVAL = 60_000;
+
+export function NewsFeed({initialData}: {initialData: NewsResponse}) {
+    const [data, setData] = useState<NewsResponse>(initialData);
+    const [activeCategory, setActiveCategory] = useState<NewsCategory | null>(null);
+    const [page, setPage] = useState(1);
+    const [loading, setLoading] = useState(false);
+    const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+    const categoryRef = useRef<NewsCategory | null>(null);
+    const pageRef = useRef(1);
+
+    const fetchNews = useCallback(async (category: NewsCategory | null, p: number, silent = false) => {
+        if (!silent) setLoading(true);
+        try {
+            const params = new URLSearchParams({page: String(p), pageSize: '20'});
+            if (category) params.set('category', category);
+
+            const res = await fetch(`/api/news?${params.toString()}`);
+            if (!res.ok) throw new Error('fetch failed');
+            const json: NewsResponse = await res.json();
+            setData(json);
+            setLastUpdated(new Date());
+        } catch (err) {
+            console.error('[NewsFeed] fetch error:', err);
+        } finally {
+            if (!silent) setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        const timer = setInterval(() => {
+            fetchNews(categoryRef.current, pageRef.current, true);
+        }, POLL_INTERVAL);
+        return () => clearInterval(timer);
+    }, [fetchNews]);
+
+    const handleCategoryChange = (category: NewsCategory | null) => {
+        setActiveCategory(category);
+        categoryRef.current = category;
+        setPage(1);
+        pageRef.current = 1;
+        fetchNews(category, 1);
+    };
+
+    const handlePageChange = (newPage: number) => {
+        setPage(newPage);
+        pageRef.current = newPage;
+        fetchNews(activeCategory, newPage);
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    };
+
+    const handleRefresh = () => {
+        fetchNews(activeCategory, page);
+    };
+
+    return (
+        <div>
+            <div className="mb-4 flex items-center gap-2">
+                <div className="flex flex-1 items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                    {CATEGORIES.map((cat) => (
+                        <button
+                            key={cat.label}
+                            onClick={() => handleCategoryChange(cat.value)}
+                            className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                                activeCategory === cat.value
+                                    ? 'bg-accent text-white'
+                                    : 'bg-bg-card text-text-secondary hover:text-text-primary'
+                            }`}
+                        >
+                            {cat.label}
+                        </button>
+                    ))}
+                </div>
+                <button
+                    onClick={handleRefresh}
+                    disabled={loading}
+                    className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-[11px] text-text-disabled transition-colors hover:text-text-secondary"
+                    title={`上次更新: ${lastUpdated.toLocaleTimeString('zh-CN')}`}
+                >
+                    <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
+                    <span className="hidden lg:inline">{lastUpdated.toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'})}</span>
+                </button>
+            </div>
+
+            {loading && (
+                <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-accent" />
+                </div>
+            )}
+
+            {!loading && data.items.length === 0 && (
+                <div className="py-12 text-center text-sm text-text-disabled">暂无新闻</div>
+            )}
+
+            {!loading && data.items.length > 0 && (
+                <div className="space-y-2">
+                    {data.items.map((item) => (
+                        <NewsCard
+                            key={item.id}
+                            title={item.title}
+                            summary={item.summary}
+                            category={item.category}
+                            source={item.source}
+                            sourceUrl={item.sourceUrl}
+                            publishedAt={item.publishedAt}
+                            sentiment={item.sentiment}
+                            tickers={item.tickers}
+                            tags={item.tags}
+                            importance={item.importance}
+                            isAiGenerated={item.isAiGenerated}
+                            relatedCount={item.relatedCount}
+                        />
+                    ))}
+                </div>
+            )}
+
+            {/* 移动端：到底了 */}
+            {!loading && data.totalPages <= 1 && data.items.length > 0 && (
+                <div className="mt-4 py-4 text-center text-xs text-text-disabled lg:hidden">到底了</div>
+            )}
+
+            {/* 分页 */}
+            {!loading && data.totalPages > 1 && (
+                <div className="mt-6 flex items-center justify-center gap-1">
+                    {Array.from({length: Math.min(data.totalPages, 7)}, (_, i) => {
+                        const p = i + 1;
+                        return (
+                            <button
+                                key={p}
+                                onClick={() => handlePageChange(p)}
+                                className={`h-8 w-8 rounded text-sm font-medium transition-colors ${
+                                    page === p
+                                        ? 'bg-accent text-white'
+                                        : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'
+                                }`}
+                            >
+                                {p}
+                            </button>
+                        );
+                    })}
+                    {data.totalPages > 7 && <span className="px-1 text-text-disabled">...</span>}
+                </div>
+            )}
+        </div>
+    );
+}

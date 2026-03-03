@@ -1,8 +1,7 @@
-import type {Metadata} from 'next';
+import type {Metadata, Viewport} from 'next';
 import {Inter, Lexend, JetBrains_Mono} from 'next/font/google';
-import {ThemeProvider} from 'next-themes';
-import NextTopLoader from 'nextjs-toploader';
 import {createClient} from '~/lib/supabase/server';
+import {Providers} from './providers';
 import {TopNavbar} from './components/top-navbar';
 import {BottomTabs} from './components/bottom-tabs';
 import {MobileHeader} from './components/mobile-header';
@@ -26,7 +25,12 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
     title: 'FinAgents OS',
     description: 'FinAgents Operating System',
-    viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
+};
+
+export const viewport: Viewport = {
+    width: 'device-width',
+    initialScale: 1,
+    viewportFit: 'cover',
 };
 
 export default async function RootLayout({
@@ -48,15 +52,14 @@ export default async function RootLayout({
             <body
                 className={`${inter.variable} ${lexend.variable} ${jetbrainsMono.variable} bg-bg-base font-inter text-text-primary antialiased`}
             >
-                <NextTopLoader color="#2962ff" showSpinner={false} />
-                <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+                <Providers>
                     <TopNavbar user={user} className="hidden lg:flex" />
                     <MobileHeader className="flex lg:hidden" />
 
                     <main className="pb-14 lg:pb-0">{children}</main>
 
                     <BottomTabs user={user} className="flex lg:hidden" />
-                </ThemeProvider>
+                </Providers>
             </body>
         </html>
     );
