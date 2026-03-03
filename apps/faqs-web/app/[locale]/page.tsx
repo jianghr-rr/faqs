@@ -124,18 +124,12 @@ export default async function HomePage() {
                                 </span>
                                 {user && (
                                     <div className="flex items-center gap-3">
-                                        <button
-                                            onClick={(e) => e.preventDefault()}
-                                            className="flex items-center gap-1 text-text-secondary hover:text-warning transition-colors"
-                                        >
+                                        <span className="flex items-center gap-1 text-text-secondary hover:text-warning transition-colors">
                                             <Star className="h-3.5 w-3.5" />
-                                        </button>
-                                        <button
-                                            onClick={(e) => e.preventDefault()}
-                                            className="flex items-center gap-1 text-text-secondary hover:text-accent transition-colors"
-                                        >
+                                        </span>
+                                        <span className="flex items-center gap-1 text-text-secondary hover:text-accent transition-colors">
                                             <BarChart3 className="h-3.5 w-3.5" />
-                                        </button>
+                                        </span>
                                     </div>
                                 )}
                             </div>
