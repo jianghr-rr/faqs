@@ -4,10 +4,21 @@ import {redirect} from 'next/navigation';
 import {headers} from 'next/headers';
 import {createClient} from '~/lib/supabase/server';
 
+function getOrigin(headersList: Awaited<ReturnType<typeof headers>>): string {
+    if (process.env.NEXT_PUBLIC_APP_URL) {
+        return process.env.NEXT_PUBLIC_APP_URL;
+    }
+    const origin = headersList.get('origin');
+    if (origin) return origin;
+    const host = headersList.get('x-forwarded-host') ?? headersList.get('host') ?? 'localhost:3000';
+    const proto = headersList.get('x-forwarded-proto') ?? 'http';
+    return `${proto}://${host}`;
+}
+
 export async function signInWithMagicLink(email: string) {
     const supabase = await createClient();
     const headersList = await headers();
-    const origin = headersList.get('origin') ?? 'http://localhost:3000';
+    const origin = getOrigin(headersList);
 
     const {error} = await supabase.auth.signInWithOtp({
         email,
@@ -27,7 +38,7 @@ export async function signInWithMagicLink(email: string) {
 export async function signInWithOAuth(provider: 'github' | 'google') {
     const supabase = await createClient();
     const headersList = await headers();
-    const origin = headersList.get('origin') ?? 'http://localhost:3000';
+    const origin = getOrigin(headersList);
 
     const {data, error} = await supabase.auth.signInWithOAuth({
         provider,
