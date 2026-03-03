@@ -3,9 +3,15 @@ import {createServerClient} from '@supabase/ssr';
 import {cookies} from 'next/headers';
 
 export async function GET(request: Request) {
-    const {searchParams, origin} = new URL(request.url);
+    const url = new URL(request.url);
+    const searchParams = url.searchParams;
     const code = searchParams.get('code');
     const next = searchParams.get('next') ?? '/';
+
+    const origin =
+        process.env.APP_ORIGIN ??
+        process.env.NEXT_PUBLIC_APP_URL ??
+        `${url.protocol}//${request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? url.host}`;
 
     if (code) {
         const cookieStore = await cookies();
