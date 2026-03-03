@@ -3,7 +3,7 @@ import {i18nRouter} from 'next-i18n-router';
 import {updateSession} from '~/lib/supabase/proxy';
 import i18nConfig from './i18nConfig';
 
-const protectedRoutes = ['/personal-center'];
+const protectedRoutes = ['/analysis', '/my-faqs', '/settings'];
 
 export async function proxy(request: NextRequest) {
     const i18nResponse = i18nRouter(request, i18nConfig);
@@ -18,7 +18,8 @@ export async function proxy(request: NextRequest) {
 
     if (isProtectedRoute && !user) {
         const locale = pathname.match(/^\/(zh|en)(?=\/|$)/)?.[1] ?? 'zh';
-        return NextResponse.redirect(new URL(`/${locale}/login`, request.url));
+        const callbackUrl = encodeURIComponent(pathnameWithoutLocale);
+        return NextResponse.redirect(new URL(`/${locale}/login?next=${callbackUrl}`, request.url));
     }
 
     return response;

@@ -1,13 +1,15 @@
 'use client';
 
+import {LogOut} from 'lucide-react';
 import {signOut} from '~/actions/auth';
 
 export function SignOutButton() {
     return (
         <button
             onClick={() => signOut()}
-            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+            className="flex w-full items-center gap-3 px-4 py-3 text-sm text-danger transition-colors hover:bg-bg-hover active:bg-bg-hover"
         >
+            <LogOut className="h-5 w-5" />
             退出登录
         </button>
     );

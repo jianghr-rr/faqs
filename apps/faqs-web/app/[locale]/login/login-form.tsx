@@ -38,12 +38,9 @@ export function LoginForm() {
 
     return (
         <>
-            <form onSubmit={handleMagicLink} className="space-y-4">
+            <form onSubmit={handleMagicLink} className="space-y-3">
                 <div>
-                    <label
-                        htmlFor="email"
-                        className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                    >
+                    <label htmlFor="email" className="mb-1 block text-xs font-medium text-text-secondary">
                         邮箱地址
                     </label>
                     <input
@@ -53,14 +50,14 @@ export function LoginForm() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="you@example.com"
-                        className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-white dark:placeholder:text-gray-500 dark:focus:border-blue-400 dark:focus:ring-blue-400"
+                        className="h-10 w-full rounded-md border border-border bg-bg-base px-3 text-sm text-text-primary placeholder:text-text-disabled transition-colors focus:border-accent focus:outline-none"
                     />
                 </div>
 
                 <button
                     type="submit"
                     disabled={loading}
-                    className="w-full rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-500 dark:hover:bg-blue-600"
+                    className="h-10 w-full rounded-md bg-accent text-sm font-medium text-white transition-colors hover:bg-accent-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     {loading ? '处理中...' : '发送验证链接'}
                 </button>
@@ -68,33 +65,31 @@ export function LoginForm() {
 
             {message && (
                 <div
-                    className={`rounded-lg px-4 py-3 text-sm ${
+                    className={`mt-3 rounded-lg px-4 py-3 text-sm ${
                         message.type === 'success'
-                            ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
-                            : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                            ? 'bg-success/10 text-success'
+                            : 'bg-danger/10 text-danger'
                     }`}
                 >
                     {message.text}
                 </div>
             )}
 
-            <div className="relative">
+            <div className="relative my-5">
                 <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-300 dark:border-gray-600" />
+                    <div className="w-full border-t border-border" />
                 </div>
-                <div className="relative flex justify-center text-sm">
-                    <span className="bg-gray-50 px-2 text-gray-500 dark:bg-gray-900 dark:text-gray-400">
-                        或
-                    </span>
+                <div className="relative flex justify-center text-xs">
+                    <span className="bg-bg-base px-2 text-text-disabled lg:bg-bg-card">或</span>
                 </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
                 <button
                     type="button"
                     onClick={() => handleOAuth('github')}
                     disabled={loading}
-                    className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                    className="flex h-10 w-full items-center justify-center gap-3 rounded-md border border-border text-sm font-medium text-text-primary transition-colors hover:bg-bg-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     <svg className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path
@@ -110,7 +105,7 @@ export function LoginForm() {
                     type="button"
                     onClick={() => handleOAuth('google')}
                     disabled={loading}
-                    className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                    className="flex h-10 w-full items-center justify-center gap-3 rounded-md border border-border text-sm font-medium text-text-primary transition-colors hover:bg-bg-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     <svg className="h-5 w-5" viewBox="0 0 24 24">
                         <path
