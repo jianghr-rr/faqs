@@ -7,6 +7,17 @@ const envSchema = z.object({
     NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, 'NEXT_PUBLIC_SUPABASE_ANON_KEY is required'),
     API_BASE_URL: z.string().url().optional().default('http://localhost:8080'),
     NEXT_PUBLIC_APP_URL: z.string().url().optional().default('http://localhost:3000'),
+
+    // News
+    FINNHUB_API_KEY: z.string().optional(),
+    CRON_SECRET: z.string().optional(),
+    NEWS_FETCH_INTERVAL_MS: z.coerce.number().positive().optional().default(300_000),
+    NEWS_MAX_AGE_DAYS: z.coerce.number().positive().optional().default(30),
+    NEWS_AI_SUMMARY_ENABLED: z
+        .enum(['true', 'false'])
+        .optional()
+        .default('false')
+        .transform((v) => v === 'true'),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -273,7 +273,9 @@ jobs:
 ### Supabase Dashboard
 
 - **Authentication → URL Configuration → Site URL**：`https://faqs.curlyhair.cn`
-- **Redirect URLs**：添加 `https://faqs.curlyhair.cn/**`
+- **Redirect URLs**：
+    - `https://faqs.curlyhair.cn/**`（生产环境）
+    - `http://localhost:3000/**`（本地开发，不加则 OAuth 回调会跳转到生产域名）
 
 ### GitHub OAuth App
 

@@ -4,10 +4,12 @@ import {
     pgEnum,
     serial,
     integer,
+    smallint,
     varchar,
     text,
     boolean,
     timestamp,
+    decimal,
     primaryKey,
     index,
     uuid,
@@ -141,3 +143,53 @@ export const faqTagsRelations = relations(faqTags, ({one}) => ({
         references: [tags.id],
     }),
 }));
+
+// ─── news ───────────────────────────────────────────
+
+export const newsCategoryEnum = pgEnum('news_category', [
+    '要闻',
+    '宏观',
+    '研报',
+    '策略',
+    'AI洞察',
+    '数据',
+]);
+
+export const newsSentimentEnum = pgEnum('news_sentiment', ['positive', 'negative', 'neutral']);
+
+export const news = pgTable(
+    'news',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        title: varchar('title', {length: 500}).notNull(),
+        summary: text('summary'),
+        content: text('content'),
+        category: newsCategoryEnum('category').notNull(),
+        source: varchar('source', {length: 100}).notNull(),
+        sourceUrl: varchar('source_url', {length: 1000}),
+        publishedAt: timestamp('published_at', {withTimezone: true}).notNull(),
+        fetchedAt: timestamp('fetched_at', {withTimezone: true}).defaultNow(),
+        sentiment: newsSentimentEnum('sentiment'),
+        sentimentScore: decimal('sentiment_score', {precision: 3, scale: 2}),
+        tickers: text('tickers').array(),
+        tags: text('tags').array(),
+        imageUrl: varchar('image_url', {length: 1000}),
+        importance: smallint('importance').notNull().default(2),
+        isAiGenerated: boolean('is_ai_generated').notNull().default(false),
+        agentId: varchar('agent_id', {length: 100}),
+        isPublished: boolean('is_published').notNull().default(true),
+        viewCount: integer('view_count').notNull().default(0),
+        createdAt: timestamp('created_at', {withTimezone: true}).notNull().defaultNow(),
+        updatedAt: timestamp('updated_at', {withTimezone: true})
+            .notNull()
+            .defaultNow()
+            .$onUpdate(() => new Date()),
+    },
+    (t) => [
+        index('news_published_at_idx').on(t.publishedAt),
+        index('news_category_idx').on(t.category),
+        index('news_importance_idx').on(t.importance),
+        index('news_is_published_idx').on(t.isPublished),
+        index('news_source_idx').on(t.source),
+    ]
+);
