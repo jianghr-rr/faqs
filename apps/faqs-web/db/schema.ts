@@ -11,6 +11,7 @@ import {
     timestamp,
     decimal,
     primaryKey,
+    unique,
     index,
     uuid,
 } from 'drizzle-orm/pg-core';
@@ -144,6 +145,26 @@ export const faqTagsRelations = relations(faqTags, ({one}) => ({
     }),
 }));
 
+// ─── user_favorites ─────────────────────────────────
+
+export const favoriteItemTypeEnum = pgEnum('favorite_item_type', ['faq', 'news']);
+
+export const userFavorites = pgTable(
+    'user_favorites',
+    {
+        id: uuid('id').primaryKey().defaultRandom(),
+        userId: uuid('user_id').notNull(),
+        itemType: favoriteItemTypeEnum('item_type').notNull(),
+        itemId: text('item_id').notNull(),
+        createdAt: timestamp('created_at', {withTimezone: true}).notNull().defaultNow(),
+    },
+    (t) => [
+        unique('user_favorites_user_item_type_id_unique').on(t.userId, t.itemType, t.itemId),
+        index('user_favorites_user_id_idx').on(t.userId),
+        index('user_favorites_created_at_idx').on(t.createdAt),
+    ]
+);
+
 // ─── news ───────────────────────────────────────────
 
 export const newsCategoryEnum = pgEnum('news_category', [
@@ -186,6 +207,7 @@ export const news = pgTable(
             .$onUpdate(() => new Date()),
     },
     (t) => [
+        unique('news_title_source_unique').on(t.title, t.source),
         index('news_published_at_idx').on(t.publishedAt),
         index('news_category_idx').on(t.category),
         index('news_importance_idx').on(t.importance),

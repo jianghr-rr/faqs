@@ -1,6 +1,8 @@
 import {ExternalLink, Clock, TrendingUp, TrendingDown, Minus} from 'lucide-react';
+import {FavoriteButton} from '../favorite-button';
 
 interface NewsCardProps {
+    id?: string;
     title: string;
     summary?: string | null;
     category: string;
@@ -13,18 +15,42 @@ interface NewsCardProps {
     importance: number;
     isAiGenerated: boolean;
     relatedCount?: number;
+    isLoggedIn?: boolean;
+    initialFavorited?: boolean;
 }
 
-function timeAgo(dateStr: string): string {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return '刚刚';
-    if (mins < 60) return `${mins}分钟前`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}小时前`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}天前`;
-    return new Date(dateStr).toLocaleDateString('zh-CN');
+function formatTime(dateStr: string): string {
+    const date = new Date(dateStr);
+    const now = new Date();
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const hours = pad(date.getHours());
+    const minutes = pad(date.getMinutes());
+
+    const isToday =
+        date.getFullYear() === now.getFullYear() &&
+        date.getMonth() === now.getMonth() &&
+        date.getDate() === now.getDate();
+
+    if (isToday) return `今天 ${hours}:${minutes}`;
+
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday =
+        date.getFullYear() === yesterday.getFullYear() &&
+        date.getMonth() === yesterday.getMonth() &&
+        date.getDate() === yesterday.getDate();
+
+    if (isYesterday) return `昨天 ${hours}:${minutes}`;
+
+    const month = pad(date.getMonth() + 1);
+    const day = pad(date.getDate());
+
+    if (date.getFullYear() === now.getFullYear()) {
+        return `${month}-${day} ${hours}:${minutes}`;
+    }
+
+    return `${date.getFullYear()}-${month}-${day} ${hours}:${minutes}`;
 }
 
 const sentimentConfig = {
@@ -34,6 +60,7 @@ const sentimentConfig = {
 } as const;
 
 export function NewsCard({
+    id,
     title,
     summary,
     category,
@@ -46,6 +73,8 @@ export function NewsCard({
     importance,
     isAiGenerated,
     relatedCount = 0,
+    isLoggedIn = false,
+    initialFavorited = false,
 }: NewsCardProps) {
     const sentimentInfo = sentiment ? sentimentConfig[sentiment as keyof typeof sentimentConfig] : null;
     const SentimentIcon = sentimentInfo?.icon;
@@ -56,7 +85,7 @@ export function NewsCard({
                 importance === 1 ? 'border-accent/30' : 'border-border'
             }`}
         >
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start justify-between gap-2">
                 <h3 className="flex-1 text-sm font-semibold text-text-primary lg:text-base">
                     {importance === 1 && (
                         <span className="mr-1.5 inline-block rounded bg-danger/10 px-1.5 py-0.5 text-[10px] font-bold text-danger">
@@ -65,9 +94,25 @@ export function NewsCard({
                     )}
                     {title}
                 </h3>
-                {sourceUrl && (
-                    <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-disabled opacity-0 transition-opacity group-hover:opacity-100" />
-                )}
+                <div className="flex shrink-0 items-center gap-1">
+                    {isLoggedIn && id && (
+                        <div
+                            onClick={(e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); }}
+                            onKeyDown={(e: React.KeyboardEvent) => e.stopPropagation()}
+                            role="presentation"
+                        >
+                            <FavoriteButton
+                                itemType="news"
+                                itemId={id}
+                                initialFavorited={initialFavorited}
+                                variant="icon"
+                            />
+                        </div>
+                    )}
+                    {sourceUrl && (
+                        <ExternalLink className="mt-0.5 h-3.5 w-3.5 text-text-disabled opacity-0 transition-opacity group-hover:opacity-100" />
+                    )}
+                </div>
             </div>
 
             {summary && (
@@ -117,7 +162,7 @@ export function NewsCard({
                 <span>·</span>
                 <span className="flex items-center gap-0.5">
                     <Clock className="h-3 w-3" />
-                    {timeAgo(publishedAt)}
+                    {formatTime(publishedAt)}
                 </span>
                 {relatedCount > 0 && (
                     <>

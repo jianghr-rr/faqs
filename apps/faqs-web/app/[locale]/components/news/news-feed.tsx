@@ -1,7 +1,7 @@
 'use client';
 
 import {useState, useCallback, useEffect, useRef} from 'react';
-import {Loader2, RefreshCw} from 'lucide-react';
+import {ChevronLeft, ChevronRight, Loader2, RefreshCw} from 'lucide-react';
 import {NewsCard} from './news-card';
 
 type NewsCategory = '要闻' | '宏观' | '研报' | '策略' | 'AI洞察' | '数据';
@@ -44,7 +44,7 @@ const CATEGORIES: Array<{label: string; value: NewsCategory | null}> = [
 
 const POLL_INTERVAL = 60_000;
 
-export function NewsFeed({initialData}: {initialData: NewsResponse}) {
+export function NewsFeed({initialData, isLoggedIn = false}: {initialData: NewsResponse; isLoggedIn?: boolean}) {
     const [data, setData] = useState<NewsResponse>(initialData);
     const [activeCategory, setActiveCategory] = useState<NewsCategory | null>(null);
     const [page, setPage] = useState(1);
@@ -141,6 +141,7 @@ export function NewsFeed({initialData}: {initialData: NewsResponse}) {
                     {data.items.map((item) => (
                         <NewsCard
                             key={item.id}
+                            id={item.id}
                             title={item.title}
                             summary={item.summary}
                             category={item.category}
@@ -153,6 +154,7 @@ export function NewsFeed({initialData}: {initialData: NewsResponse}) {
                             importance={item.importance}
                             isAiGenerated={item.isAiGenerated}
                             relatedCount={item.relatedCount}
+                            isLoggedIn={isLoggedIn}
                         />
                     ))}
                 </div>
@@ -166,23 +168,54 @@ export function NewsFeed({initialData}: {initialData: NewsResponse}) {
             {/* 分页 */}
             {!loading && data.totalPages > 1 && (
                 <div className="mt-6 flex items-center justify-center gap-1">
-                    {Array.from({length: Math.min(data.totalPages, 7)}, (_, i) => {
-                        const p = i + 1;
-                        return (
-                            <button
-                                key={p}
-                                onClick={() => handlePageChange(p)}
-                                className={`h-8 w-8 rounded text-sm font-medium transition-colors ${
-                                    page === p
-                                        ? 'bg-accent text-white'
-                                        : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'
-                                }`}
-                            >
-                                {p}
-                            </button>
+                    <button
+                        onClick={() => handlePageChange(page - 1)}
+                        disabled={page <= 1}
+                        className="flex h-8 w-8 items-center justify-center rounded text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary disabled:opacity-30 disabled:hover:bg-transparent"
+                    >
+                        <ChevronLeft className="h-4 w-4" />
+                    </button>
+
+                    {(() => {
+                        const pages: (number | 'dots')[] = [];
+                        const total = data.totalPages;
+                        if (total <= 7) {
+                            for (let i = 1; i <= total; i++) pages.push(i);
+                        } else {
+                            pages.push(1);
+                            const start = Math.max(2, page - 1);
+                            const end = Math.min(total - 1, page + 1);
+                            if (start > 2) pages.push('dots');
+                            for (let i = start; i <= end; i++) pages.push(i);
+                            if (end < total - 1) pages.push('dots');
+                            pages.push(total);
+                        }
+                        return pages.map((p, idx) =>
+                            p === 'dots' ? (
+                                <span key={`dots-${idx}`} className="px-1 text-text-disabled">…</span>
+                            ) : (
+                                <button
+                                    key={p}
+                                    onClick={() => handlePageChange(p)}
+                                    className={`h-8 min-w-8 rounded px-1 text-sm font-medium transition-colors ${
+                                        page === p
+                                            ? 'bg-accent text-white'
+                                            : 'text-text-secondary hover:bg-bg-hover hover:text-text-primary'
+                                    }`}
+                                >
+                                    {p}
+                                </button>
+                            )
                         );
-                    })}
-                    {data.totalPages > 7 && <span className="px-1 text-text-disabled">...</span>}
+                    })()}
+
+                    <button
+                        onClick={() => handlePageChange(page + 1)}
+                        disabled={page >= data.totalPages}
+                        className="flex h-8 w-8 items-center justify-center rounded text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary disabled:opacity-30 disabled:hover:bg-transparent"
+                    >
+                        <ChevronRight className="h-4 w-4" />
+                    </button>
                 </div>
             )}
         </div>

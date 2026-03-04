@@ -60,7 +60,7 @@ export default async function HomePage() {
             )}
 
             {/* 分类 Tab + 新闻信息流 */}
-            <NewsFeed initialData={serializedNewsData} />
+            <NewsFeed initialData={serializedNewsData} isLoggedIn={!!user} />
 
             {/* 浮动添加按钮（移动端，仅登录用户） */}
             {user && (

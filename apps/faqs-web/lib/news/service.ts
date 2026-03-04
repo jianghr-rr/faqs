@@ -1,8 +1,8 @@
 import 'server-only';
 
 import {db} from '~/db';
-import {news} from '~/db/schema';
-import {desc, eq, and, gte, sql, type SQL} from 'drizzle-orm';
+import {news, userFavorites} from '~/db/schema';
+import {desc, eq, and, gte, lt, inArray, sql, type SQL} from 'drizzle-orm';
 import type {NewsAdapter, NewsCategory, RawNewsItem} from './types';
 import {recordSuccess, recordFailure, isAdapterHealthy} from './health';
 
@@ -159,38 +159,25 @@ export async function queryNews(options: NewsQueryOptions = {}) {
             .where(and(...conditions)),
     ]);
 
-    const grouped = groupRelatedNews(items);
+    const total = Number(countResult[0]?.count ?? 0);
 
-    return {
-        items: grouped,
-        total: Number(countResult[0]?.count ?? 0),
-        page,
-        pageSize,
-        totalPages: Math.ceil(Number(countResult[0]?.count ?? 0) / pageSize),
-    };
-}
-
-function groupRelatedNews<T extends {title: string; id: string | number}>(items: T[]): Array<T & {relatedCount: number}> {
-    const result: Array<T & {relatedCount: number}> = [];
-    const consumed = new Set<string | number>();
-
-    for (const item of items) {
-        if (consumed.has(item.id)) continue;
-
+    const enriched = items.map((item) => {
         let relatedCount = 0;
         for (const other of items) {
-            if (other.id === item.id || consumed.has(other.id)) continue;
-            if (titleSimilarity(item.title, other.title) > 0.6) {
+            if (other.id !== item.id && titleSimilarity(item.title, other.title) > 0.6) {
                 relatedCount++;
-                consumed.add(other.id);
             }
         }
+        return {...item, relatedCount};
+    });
 
-        consumed.add(item.id);
-        result.push({...item, relatedCount});
-    }
-
-    return result;
+    return {
+        items: enriched,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+    };
 }
 
 export async function queryTopNews(limit = 5) {
@@ -209,4 +196,47 @@ export async function queryRecentNews(since: Date, limit = 50) {
         .where(and(eq(news.isPublished, true), gte(news.publishedAt, since)))
         .orderBy(desc(news.publishedAt))
         .limit(limit);
+}
+
+// ─── Purge ──────────────────────────────────────────
+
+export interface PurgeResult {
+    deletedNews: number;
+    deletedFavorites: number;
+    cutoffDate: string;
+}
+
+export async function purgeOldNews(retentionDays = 7): Promise<PurgeResult> {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+
+    const staleIds = await db
+        .select({id: news.id})
+        .from(news)
+        .where(lt(news.publishedAt, cutoff));
+
+    if (staleIds.length === 0) {
+        return {deletedNews: 0, deletedFavorites: 0, cutoffDate: cutoff.toISOString()};
+    }
+
+    const idList = staleIds.map((r) => r.id);
+
+    const BATCH_SIZE = 500;
+    let deletedFavorites = 0;
+    let deletedNews = 0;
+
+    for (let i = 0; i < idList.length; i += BATCH_SIZE) {
+        const batch = idList.slice(i, i + BATCH_SIZE);
+
+        const favRows = await db
+            .delete(userFavorites)
+            .where(and(eq(userFavorites.itemType, 'news'), inArray(userFavorites.itemId, batch)))
+            .returning({id: userFavorites.id});
+        deletedFavorites += favRows.length;
+
+        const newsRows = await db.delete(news).where(inArray(news.id, batch)).returning({id: news.id});
+        deletedNews += newsRows.length;
+    }
+
+    return {deletedNews, deletedFavorites, cutoffDate: cutoff.toISOString()};
 }

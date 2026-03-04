@@ -3,7 +3,7 @@ import {i18nRouter} from 'next-i18n-router';
 import {updateSession} from '~/lib/supabase/proxy';
 import i18nConfig from './i18nConfig';
 
-const protectedRoutes = ['/analysis', '/my-faqs', '/settings'];
+const protectedRoutes = ['/analysis', '/my-faqs', '/settings', '/favorites'];
 
 export async function proxy(request: NextRequest) {
     const i18nResponse = i18nRouter(request, i18nConfig);
