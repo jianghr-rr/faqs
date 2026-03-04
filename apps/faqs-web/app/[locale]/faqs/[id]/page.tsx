@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import {createClient} from '~/lib/supabase/server';
-import {Edit, BarChart3, Star, ChevronRight} from 'lucide-react';
+import {Edit, BarChart3, ChevronRight} from 'lucide-react';
+import {checkFavorites} from '~/actions/favorites';
+import {FavoriteButton} from '../../components/favorite-button';
 
 const MOCK_FAQ = {
     id: '1',
@@ -72,6 +74,16 @@ export default async function FaqDetailPage({params}: {params: Promise<{id: stri
 
     const faq = MOCK_FAQ;
 
+    let isFavorited = false;
+    if (user) {
+        try {
+            const result = await checkFavorites('faq', [id]);
+            isFavorited = result[id] ?? false;
+        } catch {
+            // ignore – button defaults to unfavorited
+        }
+    }
+
     return (
         <div className="mx-auto max-w-3xl px-4 py-4 lg:py-6">
             <nav className="mb-4 hidden items-center gap-1 text-xs text-text-secondary lg:flex">
@@ -140,10 +152,11 @@ export default async function FaqDetailPage({params}: {params: Promise<{id: stri
                             <BarChart3 className="h-4 w-4" />
                             分析
                         </button>
-                        <button className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-xs font-medium text-text-secondary transition-colors hover:bg-bg-hover hover:text-warning lg:flex-none lg:px-4">
-                            <Star className="h-4 w-4" />
-                            收藏
-                        </button>
+                        <FavoriteButton
+                            itemType="faq"
+                            itemId={id}
+                            initialFavorited={isFavorited}
+                        />
                     </div>
                 </div>
             )}

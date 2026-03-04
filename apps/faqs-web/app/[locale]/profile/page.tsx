@@ -12,7 +12,7 @@ type MenuItem = {
 
 const authMenuItems: MenuItem[] = [
     {icon: FileText, label: '我的 FAQ', href: '/my-faqs'},
-    {icon: Star, label: '我的收藏', href: '/my-faqs'},
+    {icon: Star, label: '我的收藏', href: '/favorites'},
     {icon: BarChart3, label: '分析历史', href: '/analysis'},
 ];
 

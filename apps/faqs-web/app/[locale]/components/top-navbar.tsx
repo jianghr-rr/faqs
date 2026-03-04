@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import {usePathname} from 'next/navigation';
 import type {User} from '@supabase/supabase-js';
-import {LogOut, Settings, ChevronDown} from 'lucide-react';
+import {LogOut, Settings, Star, ChevronDown} from 'lucide-react';
 import {useState, useRef, useEffect} from 'react';
 import {signOut} from '~/actions/auth';
 import {ThemeToggleCompact} from './theme-toggle';
@@ -104,6 +104,14 @@ export function TopNavbar({user, className = ''}: {user: User | null; className?
                                         </p>
                                         <p className="truncate text-xs text-text-secondary">{user.email}</p>
                                     </div>
+                                    <Link
+                                        href="/favorites"
+                                        onClick={() => setMenuOpen(false)}
+                                        className="flex w-full items-center gap-2 px-4 py-2 text-sm text-text-secondary transition-colors hover:bg-bg-hover hover:text-text-primary"
+                                    >
+                                        <Star className="h-4 w-4" />
+                                        我的收藏
+                                    </Link>
                                     <Link
                                         href="/settings"
                                         onClick={() => setMenuOpen(false)}
