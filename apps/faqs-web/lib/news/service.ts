@@ -1,5 +1,6 @@
 import 'server-only';
 
+import {unstable_cache} from 'next/cache';
 import {db} from '~/db';
 import {news, userFavorites} from '~/db/schema';
 import {desc, eq, and, gte, lt, inArray, sql, type SQL} from 'drizzle-orm';
@@ -131,7 +132,9 @@ export interface NewsQueryOptions {
     pageSize?: number;
 }
 
-export async function queryNews(options: NewsQueryOptions = {}) {
+const NEWS_CACHE_REVALIDATE_SECONDS = 30;
+
+async function queryNewsUncached(options: NewsQueryOptions = {}) {
     const {category, importance, page = 1, pageSize = 20} = options;
 
     const conditions: SQL[] = [eq(news.isPublished, true)];
@@ -180,13 +183,46 @@ export async function queryNews(options: NewsQueryOptions = {}) {
     };
 }
 
-export async function queryTopNews(limit = 5) {
+const queryNewsCached = unstable_cache(
+    async (category: NewsCategory | null, importance: number | null, page: number, pageSize: number) =>
+        queryNewsUncached({
+            category: category ?? undefined,
+            importance: importance ?? undefined,
+            page,
+            pageSize,
+        }),
+    ['news-query'],
+    {
+        revalidate: NEWS_CACHE_REVALIDATE_SECONDS,
+        tags: ['news'],
+    }
+);
+
+export async function queryNews(options: NewsQueryOptions = {}) {
+    const {category, importance, page = 1, pageSize = 20} = options;
+    return queryNewsCached(category ?? null, importance ?? null, page, pageSize);
+}
+
+async function queryTopNewsUncached(limit = 5) {
     return db
         .select()
         .from(news)
         .where(and(eq(news.isPublished, true), eq(news.importance, 1)))
         .orderBy(desc(news.publishedAt))
         .limit(limit);
+}
+
+const queryTopNewsCached = unstable_cache(
+    async (limit: number) => queryTopNewsUncached(limit),
+    ['top-news-query'],
+    {
+        revalidate: NEWS_CACHE_REVALIDATE_SECONDS,
+        tags: ['news'],
+    }
+);
+
+export async function queryTopNews(limit = 5) {
+    return queryTopNewsCached(limit);
 }
 
 export async function queryRecentNews(since: Date, limit = 50) {

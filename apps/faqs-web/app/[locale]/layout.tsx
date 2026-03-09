@@ -1,6 +1,6 @@
 import type {Metadata, Viewport} from 'next';
 import {Inter, Lexend, JetBrains_Mono} from 'next/font/google';
-import {createClient} from '~/lib/supabase/server';
+import {getCurrentUser} from '~/lib/supabase/server';
 import {Providers} from './providers';
 import {TopNavbar} from './components/top-navbar';
 import {BottomTabs} from './components/bottom-tabs';
@@ -41,11 +41,7 @@ export default async function RootLayout({
     params: Promise<{locale: string}>;
 }) {
     const {locale} = await params;
-
-    const supabase = await createClient();
-    const {
-        data: {user},
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     return (
         <html lang={locale} suppressHydrationWarning>

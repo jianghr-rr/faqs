@@ -49,9 +49,13 @@ export function NewsFeed({initialData, isLoggedIn = false}: {initialData: NewsRe
     const [activeCategory, setActiveCategory] = useState<NewsCategory | null>(null);
     const [page, setPage] = useState(1);
     const [loading, setLoading] = useState(false);
-    const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
     const categoryRef = useRef<NewsCategory | null>(null);
     const pageRef = useRef(1);
+
+    useEffect(() => {
+        setLastUpdated(new Date());
+    }, []);
 
     const fetchNews = useCallback(async (category: NewsCategory | null, p: number, silent = false) => {
         if (!silent) setLoading(true);
@@ -119,10 +123,14 @@ export function NewsFeed({initialData, isLoggedIn = false}: {initialData: NewsRe
                     onClick={handleRefresh}
                     disabled={loading}
                     className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 text-[11px] text-text-disabled transition-colors hover:text-text-secondary"
-                    title={`上次更新: ${lastUpdated.toLocaleTimeString('zh-CN')}`}
+                    title={lastUpdated ? `上次更新: ${lastUpdated.toLocaleTimeString('zh-CN')}` : undefined}
                 >
                     <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
-                    <span className="hidden lg:inline">{lastUpdated.toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'})}</span>
+                    <span className="hidden lg:inline">
+                        {lastUpdated
+                            ? lastUpdated.toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'})
+                            : '--:--'}
+                    </span>
                 </button>
             </div>
 

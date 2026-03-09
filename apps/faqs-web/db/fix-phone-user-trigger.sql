@@ -1,5 +1,5 @@
--- 新用户注册时自动在 profiles 表创建记录
--- 在 Supabase Dashboard → SQL Editor 中执行
+-- 修复：支持手机号用户创建 profile
+-- 在 Supabase Dashboard → SQL Editor 中执行此脚本
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
@@ -18,8 +18,3 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE OR REPLACE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION public.handle_new_user();

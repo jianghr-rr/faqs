@@ -1,16 +1,20 @@
 import {redirect} from 'next/navigation';
-import {createClient} from '~/lib/supabase/server';
+import {getCurrentUser} from '~/lib/supabase/server';
 import {LoginForm} from './login-form';
+
+const selectableAccounts = [
+    {id: 'admin-1', name: '管理员 1', email: 'admin1@finagents.app'},
+    {id: 'admin-2', name: '管理员 2', email: 'admin2@finagents.app'},
+    {id: 'admin-3', name: '管理员 3', email: 'admin3@finagents.app'},
+    {id: 'admin-4', name: '管理员 4', email: 'admin4@finagents.app'},
+];
 
 export default async function LoginPage({
     searchParams,
 }: {
     searchParams: Promise<{error?: string; next?: string}>;
 }) {
-    const supabase = await createClient();
-    const {
-        data: {user},
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     const {error, next} = await searchParams;
 
@@ -27,7 +31,7 @@ export default async function LoginPage({
                             <div className="h-2.5 w-2.5 rounded-full bg-accent" />
                             <h1 className="font-lexend text-2xl font-bold text-text-primary">FinAgents</h1>
                         </div>
-                        <p className="text-sm text-text-secondary">登录以使用完整功能</p>
+                        <p className="text-sm text-text-secondary">使用账号密码登录以继续</p>
                     </div>
 
                     {error && (
@@ -36,7 +40,7 @@ export default async function LoginPage({
                         </div>
                     )}
 
-                    <LoginForm />
+                    <LoginForm next={next} selectableAccounts={selectableAccounts} />
                 </div>
             </div>
         </div>

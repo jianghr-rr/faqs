@@ -1,27 +1,47 @@
 'use client';
 
 import {useState} from 'react';
-import {signInWithMagicLink, signInWithOAuth} from '~/actions/auth';
+import {signInWithPassword, signInWithOAuth} from '~/actions/auth';
 
-export function LoginForm() {
-    const [email, setEmail] = useState('');
+type SelectableAccount = {
+    id: string;
+    name: string;
+    email: string;
+};
+
+const CUSTOM_EMAIL_OPTION = '__custom__';
+
+export function LoginForm({
+    next,
+    selectableAccounts = [],
+}: {
+    next?: string;
+    selectableAccounts?: SelectableAccount[];
+}) {
+    const [email, setEmail] = useState(selectableAccounts[0]?.email ?? '');
+    const [selectedAccount, setSelectedAccount] = useState(
+        selectableAccounts[0]?.email ?? CUSTOM_EMAIL_OPTION
+    );
+    const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState<{type: 'success' | 'error'; text: string} | null>(null);
 
-    async function handleMagicLink(e: React.FormEvent) {
+    async function handlePasswordLogin(e: React.FormEvent) {
         e.preventDefault();
+        if (!password) {
+            setMessage({type: 'error', text: '请输入密码'});
+            return;
+        }
+
         setLoading(true);
         setMessage(null);
 
-        const result = await signInWithMagicLink(email);
+        const result = await signInWithPassword(email, password, next);
 
-        if (result.error) {
+        if (result?.error) {
             setMessage({type: 'error', text: result.error});
-        } else {
-            setMessage({type: 'success', text: '验证链接已发送到你的邮箱，请查收'});
-            setEmail('');
+            setLoading(false);
         }
-        setLoading(false);
     }
 
     async function handleOAuth(provider: 'github' | 'google') {
@@ -38,18 +58,67 @@ export function LoginForm() {
 
     return (
         <>
-            <form onSubmit={handleMagicLink} className="space-y-3">
+            <form onSubmit={handlePasswordLogin} className="space-y-3">
                 <div>
                     <label htmlFor="email" className="mb-1 block text-xs font-medium text-text-secondary">
-                        邮箱地址
+                        账号邮箱
+                    </label>
+                    {selectableAccounts.length > 0 ? (
+                        <div className="space-y-2">
+                            <select
+                                id="email"
+                                value={selectedAccount}
+                                onChange={(e) => {
+                                    const value = e.target.value;
+                                    setSelectedAccount(value);
+                                    setEmail(value === CUSTOM_EMAIL_OPTION ? '' : value);
+                                    setMessage(null);
+                                }}
+                                className="h-10 w-full rounded-md border border-border bg-bg-base px-3 text-sm text-text-primary transition-colors focus:border-accent focus:outline-none"
+                            >
+                                {selectableAccounts.map((account) => (
+                                    <option key={account.id} value={account.email}>
+                                        {account.name} - {account.email}
+                                    </option>
+                                ))}
+                                <option value={CUSTOM_EMAIL_OPTION}>手动输入其他邮箱</option>
+                            </select>
+
+                            {selectedAccount === CUSTOM_EMAIL_OPTION && (
+                                <input
+                                    type="email"
+                                    required
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    placeholder="you@example.com"
+                                    className="h-10 w-full rounded-md border border-border bg-bg-base px-3 text-sm text-text-primary placeholder:text-text-disabled transition-colors focus:border-accent focus:outline-none"
+                                />
+                            )}
+                        </div>
+                    ) : (
+                        <input
+                            id="email"
+                            type="email"
+                            required
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="you@example.com"
+                            className="h-10 w-full rounded-md border border-border bg-bg-base px-3 text-sm text-text-primary placeholder:text-text-disabled transition-colors focus:border-accent focus:outline-none"
+                        />
+                    )}
+                </div>
+
+                <div>
+                    <label htmlFor="password" className="mb-1 block text-xs font-medium text-text-secondary">
+                        登录密码
                     </label>
                     <input
-                        id="email"
-                        type="email"
+                        id="password"
+                        type="password"
                         required
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="you@example.com"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="请输入密码"
                         className="h-10 w-full rounded-md border border-border bg-bg-base px-3 text-sm text-text-primary placeholder:text-text-disabled transition-colors focus:border-accent focus:outline-none"
                     />
                 </div>
@@ -59,7 +128,7 @@ export function LoginForm() {
                     disabled={loading}
                     className="h-10 w-full rounded-md bg-accent text-sm font-medium text-white transition-colors hover:bg-accent-hover active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                    {loading ? '处理中...' : '发送验证链接'}
+                    {loading ? '登录中...' : '账号登录'}
                 </button>
             </form>
 

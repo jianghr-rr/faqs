@@ -1,4 +1,5 @@
 import {NextResponse, type NextRequest} from 'next/server';
+import {revalidateTag} from 'next/cache';
 import {purgeOldNews} from '~/lib/news';
 
 const RETENTION_DAYS = 7;
@@ -14,6 +15,7 @@ export async function GET(request: NextRequest) {
 
     try {
         const result = await purgeOldNews(RETENTION_DAYS);
+        revalidateTag('news', 'max');
 
         console.log(
             `[api/news/cleanup] purged ${result.deletedNews} news, ${result.deletedFavorites} favorites (cutoff: ${result.cutoffDate})`

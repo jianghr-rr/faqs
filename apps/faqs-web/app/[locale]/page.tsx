@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import {createClient} from '~/lib/supabase/server';
+import {getCurrentUser} from '~/lib/supabase/server';
 import {Search, Plus} from 'lucide-react';
 import {queryNews, queryTopNews} from '~/lib/news';
 import {NewsTicker, NewsFeed} from './components/news';
@@ -7,10 +7,7 @@ import {NewsTicker, NewsFeed} from './components/news';
 export const revalidate = 60;
 
 export default async function HomePage() {
-    const supabase = await createClient();
-    const {
-        data: {user},
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     const [topNews, newsData] = await Promise.all([
         queryTopNews(10).catch(() => []),
