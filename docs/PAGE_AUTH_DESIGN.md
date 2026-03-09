@@ -27,7 +27,7 @@
 
 | 页面     | 路径         | 说明                             |
 | -------- | ------------ | -------------------------------- |
-| 首页     | `/`          | FAQ 知识库列表入口               |
+| 首页     | `/`          | 首页信息流 / 知识库入口          |
 | FAQ 详情 | `/faqs/[id]` | 查看单条 FAQ 内容                |
 | 聊天     | `/chat`      | 基础 AI 聊天功能                 |
 | 登录     | `/login`     | 登录页面（已登录则重定向回首页） |
@@ -55,7 +55,8 @@
 ```
 app/[locale]/
 ├── layout.tsx                    # 共享 Layout（TopNavbar + BottomTabs + MobileHeader）
-├── page.tsx                      # 首页 → FAQ 列表（Tab: 首页）
+├── page.tsx                      # 首页 → 新闻流 / 知识库入口（Tab: 首页）
+├── loading.tsx                   # 页面级 skeleton（路由切换 Loading）
 ├── globals.css
 │
 ├── login/                        # 登录页（公开，隐藏底部 Tab）
@@ -137,7 +138,7 @@ app/[locale]/
 | 登录按钮          | 显示     | **隐藏**             |
 | 头像 + 下拉菜单   | **隐藏** | 显示（含设置、登出） |
 
-**实现方式：** `layout.tsx` 是 Server Component，在服务端获取 `user` 对象，传递给导航组件（含 `BottomTabs` + `TopNavbar`）做条件渲染。
+**实现方式：** `layout.tsx` 是 Server Component，在服务端获取 `user` 对象，传递给导航组件（含 `BottomTabs` + `TopNavbar`）做条件渲染。导航点击后在客户端先进入 pending 态，再执行路由跳转。
 
 ---
 
@@ -158,13 +159,10 @@ const protectedRoutes = ['/analysis', '/my-faqs', '/settings'];
 `app/[locale]/layout.tsx` 中获取用户信息，渲染移动端底部 Tab + 桌面端顶部导航：
 
 ```tsx
-import {createClient} from '~/lib/supabase/server';
+import {getCurrentUser} from '~/lib/supabase/server';
 
 export default async function RootLayout({children, params}) {
-    const supabase = await createClient();
-    const {
-        data: {user},
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     return (
         <html>
@@ -185,6 +183,8 @@ export default async function RootLayout({children, params}) {
     );
 }
 ```
+
+`getCurrentUser()` 使用请求级缓存，减少一次页面切换里 `layout` 和页面组件重复读取用户信息的开销。
 
 ### 5.3 混合页面的条件渲染
 
@@ -247,7 +247,25 @@ if (isProtectedRoute && !user) {
 }
 ```
 
-登录成功后在 `/auth/callback` 中读取 `next` 参数并跳转回来。
+登录成功后在 `/auth/callback` 或 `signInWithPassword()` / `verifyPhoneOtp()` 中读取 `next` 参数并跳转回来。
+
+### 5.6 页面切换与 Tab Loading
+
+当前采用“全局 + 页面 + 局部”三层 loading 反馈：
+
+| 层级     | 实现方式                     | 作用场景                        |
+| -------- | ---------------------------- | ------------------------------- |
+| 全局     | `nextjs-toploader`           | 所有路由切换的顶部进度反馈      |
+| 页面级   | `app/[locale]/loading.tsx`   | Server Component 页面切换骨架屏 |
+| 导航级   | `useTransition` + pending UI | 顶部导航、底部 Tab 点击即时反馈 |
+| 局部数据 | Skeleton 组件                | 页面内分类切换、列表刷新等场景  |
+
+实现原则：
+
+- 点击导航后要立即有反馈，不能等到新页面返回后才显示 loading
+- 页面级 loading 优先使用 skeleton，而不是全屏转圈
+- 页面内 Tab 切换使用局部 skeleton，避免整个页面闪烁
+- 全局顶部进度条作为辅助反馈，不单独承担全部 loading 职责
 
 ---
 
@@ -266,13 +284,16 @@ proxy.ts
   │
   ▼
 Layout (Server Component)
-  ├── 获取 user
+  ├── 获取 user（请求级缓存）
   └── 渲染导航栏（按登录状态条件渲染菜单项）
   │
   ▼
 Page (Server Component)
   ├── 获取 user（混合页面需要）
   └── 渲染内容 + 按登录状态条件渲染增强功能按钮
+  │
+  ├── 路由切换中：loading.tsx 渲染 skeleton
+  └── 导航点击中：TopNavbar / BottomTabs 渲染 pending 态
   │
   ▼
 Server Action / Route Handler
@@ -283,15 +304,16 @@ Server Action / Route Handler
 
 ## 7. 方案选型总结
 
-| 决策项   | 选择                             | 原因                                          |
-| -------- | -------------------------------- | --------------------------------------------- |
-| 布局方式 | 单一 Layout + 导航栏条件渲染     | 登录前后布局结构一致，不需要两套 layout       |
-| 路由组织 | `(protected)` Route Group        | 不影响 URL 结构，便于代码组织和批量管理       |
-| 路由保护 | proxy.ts 集中拦截                | 已有基础设施，扩展 `protectedRoutes` 数组即可 |
-| 混合页面 | 页面级 Server Component 条件渲染 | FAQ 浏览页公开访问，登录后叠加操作按钮        |
-| API 保护 | Server Action 内校验 user        | 三方 API Key 不暴露给前端，服务端代理调用     |
-| 登录回跳 | `next` 查询参数                  | 保存来源路径，登录后自动跳回                  |
-| 导航模式 | 移动端底部 Tab + 桌面端顶部导航  | 移动端为主要使用场景                          |
+| 决策项       | 选择                               | 原因                                          |
+| ------------ | ---------------------------------- | --------------------------------------------- |
+| 布局方式     | 单一 Layout + 导航栏条件渲染       | 登录前后布局结构一致，不需要两套 layout       |
+| 路由组织     | `(protected)` Route Group          | 不影响 URL 结构，便于代码组织和批量管理       |
+| 路由保护     | proxy.ts 集中拦截                  | 已有基础设施，扩展 `protectedRoutes` 数组即可 |
+| 混合页面     | 页面级 Server Component 条件渲染   | FAQ 浏览页公开访问，登录后叠加操作按钮        |
+| API 保护     | Server Action 内校验 user          | 三方 API Key 不暴露给前端，服务端代理调用     |
+| 登录回跳     | `next` 查询参数                    | 保存来源路径，登录后自动跳回                  |
+| 导航模式     | 移动端底部 Tab + 桌面端顶部导航    | 移动端为主要使用场景                          |
+| Loading 反馈 | 顶部进度条 + skeleton + pending 态 | 同时覆盖路由切换与页面内数据切换              |
 
 ---
 

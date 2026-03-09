@@ -12,6 +12,7 @@ build
 .tmp
 .cache
 .turbo
+.eslintcache
 *.tsbuildinfo
 
 # Environment

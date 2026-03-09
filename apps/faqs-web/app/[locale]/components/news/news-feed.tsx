@@ -1,8 +1,9 @@
 'use client';
 
 import {useState, useCallback, useEffect, useRef} from 'react';
-import {ChevronLeft, ChevronRight, Loader2, RefreshCw} from 'lucide-react';
+import {ChevronLeft, ChevronRight, RefreshCw} from 'lucide-react';
 import {NewsCard} from './news-card';
+import {NewsFeedSkeleton} from './news-feed-skeleton';
 
 type NewsCategory = '要闻' | '宏观' | '研报' | '策略' | 'AI洞察' | '数据';
 
@@ -109,11 +110,12 @@ export function NewsFeed({initialData, isLoggedIn = false}: {initialData: NewsRe
                         <button
                             key={cat.label}
                             onClick={() => handleCategoryChange(cat.value)}
+                            disabled={loading}
                             className={`shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                                 activeCategory === cat.value
                                     ? 'bg-accent text-white'
                                     : 'bg-bg-card text-text-secondary hover:text-text-primary'
-                            }`}
+                            } disabled:cursor-not-allowed disabled:opacity-60`}
                         >
                             {cat.label}
                         </button>
@@ -134,11 +136,7 @@ export function NewsFeed({initialData, isLoggedIn = false}: {initialData: NewsRe
                 </button>
             </div>
 
-            {loading && (
-                <div className="flex items-center justify-center py-8">
-                    <Loader2 className="h-5 w-5 animate-spin text-accent" />
-                </div>
-            )}
+            {loading && <NewsFeedSkeleton count={4} />}
 
             {!loading && data.items.length === 0 && (
                 <div className="py-12 text-center text-sm text-text-disabled">暂无新闻</div>
