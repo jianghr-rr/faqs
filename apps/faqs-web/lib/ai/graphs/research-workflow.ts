@@ -321,6 +321,14 @@ async function generateReportNode(state: ResearchWorkflowState) {
             webSearchEvidence: state.webSearchEvidence,
         }),
         resultMeta: (() => {
+            if (!hasStructuredResult(state)) {
+                return {
+                    confidence: 'low',
+                    sourceType: 'model_plus_search',
+                    validationStatus: 'model_only',
+                } satisfies ResearchResultMeta;
+            }
+
             const fallbackOnly = hasFallbackResult(state) && !hasDirectResult(state);
             if (fallbackOnly) {
                 return {
@@ -356,7 +364,7 @@ async function generateModelOnlyObservationNode(state: ResearchWorkflowState) {
 }
 
 function routeAfterRanking(state: ResearchWorkflowState) {
-    if (!hasStructuredResult(state) && state.mode === 'news_analysis' && state.webSearchEvidence.length > 0) {
+    if (!hasStructuredResult(state) && state.mode === 'news_analysis') {
         return 'generateObservation';
     }
 
