@@ -77,6 +77,8 @@ jobs:
                         -p 3001:3000 \
                         -e DATABASE_URL='${{ secrets.DATABASE_URL }}' \
                         -e DIRECT_URL='${{ secrets.DIRECT_URL }}' \
+                        -e NEXT_PUBLIC_SUPABASE_URL='${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}' \
+                        -e NEXT_PUBLIC_SUPABASE_ANON_KEY='${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}' \
                         -e API_BASE_URL='${{ secrets.API_BASE_URL }}' \
                         -e NEXT_PUBLIC_APP_URL='${{ secrets.NEXT_PUBLIC_APP_URL }}' \
                         -e APP_ORIGIN='${{ secrets.APP_ORIGIN }}' \
@@ -87,8 +89,8 @@ jobs:
                         -e OPENAI_MODEL='${{ secrets.OPENAI_MODEL }}' \
                         -e TAVILY_API_KEY='${{ secrets.TAVILY_API_KEY }}' \
                         -e TAVILY_ALLOWED_DOMAINS='${{ secrets.TAVILY_ALLOWED_DOMAINS }}' \
-                        -e TAVILY_CACHE_TTL_SECONDS='${{ secrets.TAVILY_CACHE_TTL_SECONDS }}' \
-                        -e TAVILY_MAX_RESULTS='${{ secrets.TAVILY_MAX_RESULTS }}' \
+                        -e TAVILY_CACHE_TTL_SECONDS='${{ secrets.TAVILY_CACHE_TTL_SECONDS || 1800 }}' \
+                        -e TAVILY_MAX_RESULTS='${{ secrets.TAVILY_MAX_RESULTS || 5 }}' \
                         ccr.ccs.tencentyun.com/jianghr/faqs-web:${{ steps.img.outputs.tag }}
 
                       docker image prune -f
