@@ -18,6 +18,13 @@ const envSchema = z.object({
         .optional()
         .default('false')
         .transform((v) => v === 'true'),
+    OPENAI_API_KEY: z.string().optional(),
+    OPENAI_BASE_URL: z.string().url().optional(),
+    OPENAI_MODEL: z.string().optional().default('gpt-4o-mini'),
+    TAVILY_API_KEY: z.string().optional(),
+    TAVILY_ALLOWED_DOMAINS: z.string().optional(),
+    TAVILY_CACHE_TTL_SECONDS: z.coerce.number().positive().optional().default(1800),
+    TAVILY_MAX_RESULTS: z.coerce.number().positive().optional().default(5),
 });
 
 export type Env = z.infer<typeof envSchema>;

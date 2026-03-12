@@ -1,4 +1,5 @@
 import {NextResponse, type NextRequest} from 'next/server';
+import {revalidateTag} from 'next/cache';
 import {ingestFromAdapters, ClsAdapter, FinnhubAdapter, getHealthStatus} from '~/lib/news';
 import {shouldFetchNow, markFetched, getScheduleInfo} from '~/lib/news/scheduler';
 
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
         const adapters = buildAdapters();
         const result = await ingestFromAdapters(adapters);
         markFetched();
+        revalidateTag('news', 'max');
 
         return NextResponse.json({
             success: true,

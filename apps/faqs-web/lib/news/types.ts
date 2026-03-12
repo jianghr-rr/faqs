@@ -2,6 +2,12 @@ export type NewsCategory = '要闻' | '宏观' | '研报' | '策略' | 'AI洞察
 
 export type NewsSentiment = 'positive' | 'negative' | 'neutral';
 
+export type RelatedSecurityHint = {
+    name: string;
+    code: string;
+    exchange?: string;
+};
+
 export interface RawNewsItem {
     title: string;
     summary?: string;
@@ -13,6 +19,7 @@ export interface RawNewsItem {
     sentiment?: NewsSentiment;
     sentimentScore?: number;
     tickers?: string[];
+    relatedSecurities?: RelatedSecurityHint[];
     tags?: string[];
     imageUrl?: string;
     importance?: 1 | 2 | 3;

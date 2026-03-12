@@ -1,0 +1,16 @@
+[
+    {
+        "id": "admin-1",
+        "name": "管理员 1",
+        "email": "admin1@example.com",
+        "password": "replace-with-strong-password",
+        "role": "admin"
+    },
+    {
+        "id": "admin-2",
+        "name": "管理员 2",
+        "email": "admin2@example.com",
+        "password": "replace-with-strong-password",
+        "role": "admin"
+    }
+]

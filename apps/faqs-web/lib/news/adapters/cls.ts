@@ -1,4 +1,4 @@
-import type {NewsAdapter, NewsCategory, NewsFetchOptions, RawNewsItem} from '../types';
+import type {NewsAdapter, NewsCategory, NewsFetchOptions, RawNewsItem, RelatedSecurityHint} from '../types';
 
 const CLS_API_BASE = 'https://www.cls.cn/nodeapi';
 
@@ -11,7 +11,7 @@ interface ClsNewsItem {
     category: string;
     shareurl: string;
     imgs: string[];
-    stock_list: Array<{name: string; code: string}>;
+    stock_list: Array<{name: string; code?: string; StockID?: string}>;
     level: string;
     bold: number;
     tags: Array<{id: number; name: string}>;
@@ -43,7 +43,39 @@ function mapImportance(item: ClsNewsItem): 1 | 2 | 3 {
     return 3;
 }
 
+function parseClsStock(item: ClsNewsItem['stock_list'][number]): RelatedSecurityHint | null {
+    const stockId = item.StockID?.trim() || item.code?.trim() || '';
+    if (!stockId) {
+        return null;
+    }
+
+    const match = stockId.match(/^(sh|sz|bj)?(\d{6})$/i);
+    if (!match) {
+        return {
+            name: item.name?.trim() ?? '',
+            code: stockId,
+            exchange: undefined,
+        };
+    }
+
+    const prefix = match[1]?.toLowerCase();
+    const code = match[2] ?? '';
+    const exchange = prefix === 'sh' ? 'SSE' : prefix === 'sz' ? 'SZSE' : prefix === 'bj' ? 'BSE' : undefined;
+
+    return {
+        name: item.name?.trim() ?? '',
+        code,
+        exchange,
+    };
+}
+
+function isParsedClsStock(stock: RelatedSecurityHint | null): stock is RelatedSecurityHint {
+    return Boolean(stock?.name && stock.code);
+}
+
 function toRawNewsItem(item: ClsNewsItem): RawNewsItem {
+    const parsedStocks = (item.stock_list ?? []).map(parseClsStock).filter(isParsedClsStock);
+
     return {
         title: item.title || item.brief || item.content.substring(0, 100),
         summary: item.content ? item.content.substring(0, 200) : undefined,
@@ -51,7 +83,8 @@ function toRawNewsItem(item: ClsNewsItem): RawNewsItem {
         source: '财联社',
         sourceUrl: item.shareurl || undefined,
         publishedAt: new Date(item.ctime * 1000),
-        tickers: item.stock_list?.map((s) => s.code).filter(Boolean),
+        tickers: parsedStocks.map((stock) => stock.code),
+        relatedSecurities: parsedStocks,
         tags: item.tags?.map((t) => t.name).filter(Boolean),
         imageUrl: item.imgs?.[0] || undefined,
         importance: mapImportance(item),

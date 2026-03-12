@@ -10,7 +10,8 @@ BEGIN
     COALESCE(
       NEW.raw_user_meta_data->>'name',
       NEW.raw_user_meta_data->>'full_name',
-      split_part(NEW.email, '@', 1)
+      CASE WHEN NEW.email IS NOT NULL THEN split_part(NEW.email, '@', 1) ELSE NULL END,
+      CASE WHEN NEW.phone IS NOT NULL THEN '手机用户' ELSE '用户' END
     ),
     NEW.raw_user_meta_data->>'avatar_url'
   );

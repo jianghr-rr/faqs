@@ -12,11 +12,13 @@ build
 .tmp
 .cache
 .turbo
+.eslintcache
 *.tsbuildinfo
 
 # Environment
 .env
 .env*.local
+apps/faqs-web/scripts/admin-accounts.local.json
 
 # Logs
 logs/

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import {createClient} from '~/lib/supabase/server';
+import {getCurrentUser} from '~/lib/supabase/server';
 import {Edit, BarChart3, ChevronRight} from 'lucide-react';
 import {checkFavorites} from '~/actions/favorites';
 import {FavoriteButton} from '../../components/favorite-button';
@@ -67,10 +67,7 @@ IC = corr(因子值, 下期收益率)
 
 export default async function FaqDetailPage({params}: {params: Promise<{id: string}>}) {
     const {id} = await params;
-    const supabase = await createClient();
-    const {
-        data: {user},
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     const faq = MOCK_FAQ;
 

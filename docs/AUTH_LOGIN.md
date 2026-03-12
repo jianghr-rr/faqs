@@ -1,6 +1,6 @@
 # 登录系统接入文档
 
-认证层完全交给 **Supabase Auth**，支持 **Magic Link（邮箱验证码）**、**GitHub 登录** 和 **Google 登录**。
+认证层完全交给 **Supabase Auth**。当前 Web 端主登录方式为 **邮箱 + 密码**，同时保留 **手机号 + 短信验证码**、**GitHub 登录** 和 **Google 登录** 的能力；`Magic Link` 仍保留在服务端能力中，但当前登录页默认不展示该入口。
 
 ---
 
@@ -47,14 +47,34 @@
 
 ### 1.3 认证流程
 
-**Magic Link（邮箱）：**
+**邮箱 + 密码（当前默认登录方式）：**
+
+```
+1. 用户在 /login 输入邮箱和密码
+2. Client Component 调用 Server Action `signInWithPassword`
+3. 服务端执行 `supabase.auth.signInWithPassword`
+4. Supabase 设置 session cookie
+5. Server Action 直接重定向到首页或 `next` 参数指定页面
+```
+
+**手机号 + 短信验证码：**
+
+```
+1. 用户输入手机号（含国家码）→ 点击「获取验证码」
+2. Supabase 通过 SMS Provider 发送 6 位验证码
+3. 用户输入验证码 → 点击「登录」
+4. 服务端 verifyOtp 校验成功 → 直接设置 session cookie
+5. 重定向到首页（或 next 参数指定页面）
+```
+
+**Magic Link（保留能力，当前 UI 默认未启用）：**
 
 ```
 1. 用户输入邮箱 → 点击「发送验证链接」
 2. Supabase 发送邮件（含 Magic Link）
 3. 用户点击邮件中的链接 → 跳转到 /auth/callback
 4. callback 路由用 code 换取 session → 设置 cookie
-5. 重定向到首页
+5. 重定向到首页或 `next` 参数指定页面
 ```
 
 **OAuth（GitHub / Google）：**
@@ -73,11 +93,12 @@
 
 ### 2.1 Supabase Dashboard 配置
 
-#### Magic Link（默认已启用）
+#### Email / Password
 
 1. 进入 Supabase Dashboard → **Authentication → Providers**
 2. 确认 **Email** Provider 已启用
-3. **Enable Magic Link / OTP** 开关打开
+3. 若使用邮箱密码登录，确认 **Email + Password** 能力已启用
+4. 若后续需要恢复 Magic Link UI，再打开 **Magic Link / OTP** 相关配置
 
 #### GitHub OAuth
 
@@ -99,6 +120,20 @@
 5. 回到 Supabase Dashboard → **Authentication → Providers → Google**
 6. 开启并填入 Client ID 和 Client Secret
 
+#### 手机号登录（Phone Auth）
+
+1. 进入 Supabase Dashboard → **Authentication → Providers → Phone**
+2. 开启 **Phone** Provider
+3. 配置 **SMS Provider**（任选其一）：
+    - **Twilio**：需 Twilio Account SID、Auth Token、Messaging Service SID
+    - **MessageBird**：需 MessageBird API Key
+    - **Vonage**：需 Vonage API Key、API Secret
+    - **TextLocal**：需 TextLocal API Key
+4. 短信模板：Supabase 默认发送 6 位数字验证码，可在 Provider 配置中自定义
+5. 限流：默认每手机号 60 秒可发送一次，可在 Dashboard 中调整
+
+> **国内手机号**：部分 SMS 服务商对 +86 号码有限制，需选择支持中国区的服务商或使用自定义 Auth Hook。
+
 > **注意**：OAuth 的回调 URL 是 Supabase 的地址（不是你的应用地址），Supabase 处理完后会重定向回你的应用。
 
 ### 2.2 获取 Supabase 项目凭据
@@ -116,9 +151,20 @@
 # ─── Supabase ────────────────────────────────────────
 NEXT_PUBLIC_SUPABASE_URL=https://cnlvdjhjkpeujvcbibmq.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+
+# ─── App URL / Callback ──────────────────────────────
+APP_ORIGIN=http://localhost:3000
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# ─── Built-in Admin Accounts ─────────────────────────
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 ```
 
 GitHub / Google 的 Client ID / Secret **不需要**放在应用的环境变量中 — 它们配置在 Supabase Dashboard，由 Supabase 服务端处理。
+
+`APP_ORIGIN` / `NEXT_PUBLIC_APP_URL` 用于 OAuth / Magic Link 回调地址拼接；本地开发时通常为 `http://localhost:3000`。
+
+`SUPABASE_SERVICE_ROLE_KEY` 仅用于初始化内置管理员账号脚本，不应暴露到前端。
 
 ---
 
@@ -218,9 +264,9 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 | F1  | `lib/supabase/client.ts`      | 浏览器端 Supabase 客户端（Client Components 使用）         |
 | F2  | `lib/supabase/server.ts`      | 服务端 Supabase 客户端（Server Components / Actions 使用） |
 | F3  | `lib/supabase/proxy.ts`       | proxy 层的 session 刷新逻辑                                |
-| F4  | `app/[locale]/login/page.tsx` | 登录页面（Magic Link 表单 + OAuth 按钮）                   |
+| F4  | `app/[locale]/login/page.tsx` | 登录页面（邮箱密码表单 + OAuth 按钮）                      |
 | F5  | `app/auth/callback/route.ts`  | Auth 回调路由（处理 Magic Link / OAuth 的 code 交换）      |
-| F6  | `actions/auth.ts`             | Server Actions（发送 Magic Link、OAuth 登录、登出）        |
+| F6  | `actions/auth.ts`             | Server Actions（邮箱密码登录、手机号登录、OAuth、登出）    |
 
 ### 5.2 修改文件
 
@@ -259,6 +305,7 @@ export function createClient() {
 ```typescript
 import {createServerClient} from '@supabase/ssr';
 import {cookies} from 'next/headers';
+import {cache} from 'react';
 
 export async function createClient() {
     const cookieStore = await cookies();
@@ -273,7 +320,17 @@ export async function createClient() {
         },
     });
 }
+
+export const getCurrentUser = cache(async () => {
+    const supabase = await createClient();
+    const {
+        data: {user},
+    } = await supabase.auth.getUser();
+    return user;
+});
 ```
+
+`getCurrentUser()` 用于同一次 Server Render 中复用用户读取结果，避免 `layout.tsx`、页面组件在一次跳转中重复请求用户信息。
 
 ### 6.2 proxy.ts 集成
 
@@ -289,18 +346,19 @@ export async function proxy(request: NextRequest) {
 ### 6.3 登录页面
 
 ```
-┌─────────────────────────────────────┐
-│           登录 FAQs                  │
-│                                     │
-│  邮箱   [________________]          │
-│                                     │
-│  [    发送验证链接    ]              │
-│                                     │
-│  ──────── 或 ────────               │
-│                                     │
-│  [ ◉ 使用 GitHub 登录  ]            │
-│  [ ◉ 使用 Google 登录  ]            │
-└─────────────────────────────────────┘
+┌────────────────────────────────────────┐
+│              登录 FinAgents             │
+│                                        │
+│  账号邮箱 [____________________]       │
+│  登录密码 [____________________]       │
+│                                        │
+│  [         账号登录         ]          │
+│                                        │
+│  ───────────── 或 ─────────────        │
+│                                        │
+│  [ ◉ 使用 GitHub 登录       ]          │
+│  [ ◉ 使用 Google 登录       ]          │
+└────────────────────────────────────────┘
 ```
 
 ### 6.4 Server Actions
@@ -308,7 +366,16 @@ export async function proxy(request: NextRequest) {
 ```typescript
 // actions/auth.ts
 
-// 发送 Magic Link
+// 邮箱密码登录
+export async function signInWithPassword(email: string, password: string, next?: string);
+
+// 发送手机验证码
+export async function sendPhoneOtp(phone: string);
+
+// 校验手机验证码并登录
+export async function verifyPhoneOtp(phone: string, token: string, next?: string);
+
+// 发送 Magic Link（保留能力）
 export async function signInWithMagicLink(email: string);
 
 // OAuth 登录（触发重定向）
@@ -349,9 +416,10 @@ export async function getCurrentProfile();
 
 ### 步骤 1：Supabase Dashboard 配置
 
-- 确认 Email / Magic Link 已启用
+- 确认 Email / Password 已启用
 - 配置 GitHub OAuth Provider
 - 配置 Google OAuth Provider
+- 如需手机号登录，配置 Phone Provider + SMS Provider
 - 获取 Project URL 和 Anon Key
 
 ### 步骤 2：依赖变更
@@ -400,7 +468,33 @@ pnpm turbo run build --filter=faqs-web
 
 ---
 
-## 九、后续扩展
+## 九、性能与加载反馈
+
+### 9.1 登录后首跳优化
+
+登录成功后回到首页时，页面会触发 App Router 的 Server Component 请求。为了减少首跳等待，当前实现增加了两层优化：
+
+- `getCurrentUser()`：对同一次服务端渲染中的 `auth.getUser()` 做请求级缓存
+- 新闻数据查询缓存：首页新闻列表与快讯数据使用服务端缓存，避免每次登录后都立即直连数据库
+
+### 9.2 页面切换 Loading 方案
+
+当前页面切换反馈采用“分层 loading”：
+
+- `nextjs-toploader`：提供全局顶部进度条
+- `app/[locale]/loading.tsx`：提供页面级 skeleton
+- `TopNavbar` / `BottomTabs`：使用 `useTransition` 在点击后立即进入 pending 态
+- 页面内数据切换（如新闻分类 Tab）：使用局部 skeleton，而不是仅显示 spinner
+
+这套方案同时覆盖：
+
+- 登录后跳回首页
+- 底部 Tab / 顶部导航切换
+- 页面内数据切换
+
+---
+
+## 十、后续扩展
 
 | 扩展             | 说明                                                       |
 | ---------------- | ---------------------------------------------------------- |
@@ -410,3 +504,42 @@ pnpm turbo run build --filter=faqs-web
 | **头像上传**     | 配合 Supabase Storage                                      |
 | **邮箱密码登录** | Supabase Auth 也支持传统邮箱密码，可随时启用               |
 | **手机号登录**   | Supabase 支持 Phone Auth（需配置 SMS Provider）            |
+
+---
+
+## 十一、本地管理员初始化
+
+为避免把管理员邮箱和密码写进仓库，账号清单改为只从本地文件读取：
+
+- 本地文件：`apps/faqs-web/scripts/admin-accounts.local.json`
+- 示例文件：`apps/faqs-web/scripts/admin-accounts.local.example.json`
+- Git 已忽略本地文件，不会进入仓库
+
+文件格式示例：
+
+```json
+[
+    {
+        "id": "admin-1",
+        "name": "管理员 1",
+        "email": "admin1@example.com",
+        "password": "replace-with-strong-password",
+        "role": "admin"
+    }
+]
+```
+
+初始化命令：
+
+```bash
+cd apps/faqs-web
+pnpm run seed:admin-accounts
+```
+
+脚本会自动：
+
+- 在 Supabase Auth 中创建或更新这 4 个用户
+- 将邮箱标记为已验证
+- 在 `public.profiles` 中补齐 `name` 和 `role`
+
+线上登录时，直接使用普通的邮箱密码登录即可，不再暴露一键内置管理员入口。

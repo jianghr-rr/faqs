@@ -22,7 +22,7 @@ interface NewsItem {
     publishedAt: string;
 }
 
-interface FavoriteItem {
+export interface FavoriteItem {
     id: string;
     itemType: string;
     itemId: string;

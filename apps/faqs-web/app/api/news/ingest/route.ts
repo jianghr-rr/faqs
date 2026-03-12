@@ -1,4 +1,5 @@
 import {NextResponse, type NextRequest} from 'next/server';
+import {revalidateTag} from 'next/cache';
 import {ingestFromAdapters, ClsAdapter, FinnhubAdapter} from '~/lib/news';
 
 function buildAdapters() {
@@ -21,6 +22,7 @@ export async function POST(request: NextRequest) {
 
         const adapters = buildAdapters();
         const result = await ingestFromAdapters(adapters);
+        revalidateTag('news', 'max');
 
         return NextResponse.json({
             success: true,

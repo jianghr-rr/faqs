@@ -1,12 +1,9 @@
-import {createClient} from '~/lib/supabase/server';
+import {getCurrentUser} from '~/lib/supabase/server';
 import {Key, Globe, Palette, Shield} from 'lucide-react';
 import {ThemeToggle} from '../../components/theme-toggle';
 
 export default async function SettingsPage() {
-    const supabase = await createClient();
-    const {
-        data: {user},
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     return (
         <div className="mx-auto max-w-2xl px-4 py-4 lg:py-6">

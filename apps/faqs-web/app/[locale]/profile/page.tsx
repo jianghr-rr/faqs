@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import {createClient} from '~/lib/supabase/server';
+import {getCurrentUser} from '~/lib/supabase/server';
 import {FileText, Star, BarChart3, Key, Globe, ChevronRight, MessageCircle} from 'lucide-react';
 import {SignOutButton} from '../sign-out-button';
 import {ThemeMenuRow} from './theme-menu-row';
@@ -44,10 +44,7 @@ function MenuGroup({items, children}: {items?: MenuItem[]; children?: React.Reac
 }
 
 export default async function ProfilePage() {
-    const supabase = await createClient();
-    const {
-        data: {user},
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) {
         return (

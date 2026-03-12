@@ -1,9 +1,8 @@
-import 'server-only';
-
+import {unstable_cache} from 'next/cache';
 import {db} from '~/db';
 import {news, userFavorites} from '~/db/schema';
 import {desc, eq, and, gte, lt, inArray, sql, type SQL} from 'drizzle-orm';
-import type {NewsAdapter, NewsCategory, RawNewsItem} from './types';
+import type {NewsAdapter, NewsCategory, RawNewsItem, RelatedSecurityHint} from './types';
 import {recordSuccess, recordFailure, isAdapterHealthy} from './health';
 
 // ─── Dedup ──────────────────────────────────────────
@@ -59,6 +58,19 @@ function dedup(items: RawNewsItem[]): RawNewsItem[] {
     return result;
 }
 
+function normalizeRelatedSecurities(items?: RelatedSecurityHint[]) {
+    return [...new Map(
+        (items ?? [])
+            .map((item) => ({
+                name: item.name?.trim() ?? '',
+                code: item.code?.trim() ?? '',
+                exchange: item.exchange?.trim() || undefined,
+            }))
+            .filter((item) => item.name && item.code)
+            .map((item) => [`${item.code}:${item.name}`, item] as const)
+    ).values()];
+}
+
 // ─── Ingest ─────────────────────────────────────────
 
 export interface IngestResult {
@@ -110,13 +122,30 @@ export async function ingestFromAdapters(adapters: NewsAdapter[]): Promise<Inges
                 sentiment: item.sentiment,
                 sentimentScore: item.sentimentScore?.toString(),
                 tickers: item.tickers,
+                relatedSecurities: normalizeRelatedSecurities(item.relatedSecurities),
                 tags: item.tags,
                 imageUrl: item.imageUrl,
                 importance: item.importance ?? 2,
                 isAiGenerated: false,
             }))
         )
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+            target: [news.title, news.source],
+            set: {
+                summary: sql`coalesce(excluded.summary, ${news.summary})`,
+                content: sql`coalesce(excluded.content, ${news.content})`,
+                sourceUrl: sql`coalesce(excluded.source_url, ${news.sourceUrl})`,
+                publishedAt: sql`excluded.published_at`,
+                sentiment: sql`coalesce(excluded.sentiment, ${news.sentiment})`,
+                sentimentScore: sql`coalesce(excluded.sentiment_score, ${news.sentimentScore})`,
+                tickers: sql`case when cardinality(excluded.tickers) > 0 then excluded.tickers else ${news.tickers} end`,
+                relatedSecurities: sql`case when jsonb_array_length(excluded.related_securities) > 0 then excluded.related_securities else ${news.relatedSecurities} end`,
+                tags: sql`case when cardinality(excluded.tags) > 0 then excluded.tags else ${news.tags} end`,
+                imageUrl: sql`coalesce(excluded.image_url, ${news.imageUrl})`,
+                importance: sql`coalesce(excluded.importance, ${news.importance})`,
+                updatedAt: new Date(),
+            },
+        })
         .returning({id: news.id});
 
     return {inserted: inserted.length, fetched, afterDedup, dedupRate: Math.round(dedupRate * 100) / 100};
@@ -131,7 +160,9 @@ export interface NewsQueryOptions {
     pageSize?: number;
 }
 
-export async function queryNews(options: NewsQueryOptions = {}) {
+const NEWS_CACHE_REVALIDATE_SECONDS = 30;
+
+async function queryNewsUncached(options: NewsQueryOptions = {}) {
     const {category, importance, page = 1, pageSize = 20} = options;
 
     const conditions: SQL[] = [eq(news.isPublished, true)];
@@ -180,13 +211,46 @@ export async function queryNews(options: NewsQueryOptions = {}) {
     };
 }
 
-export async function queryTopNews(limit = 5) {
+const queryNewsCached = unstable_cache(
+    async (category: NewsCategory | null, importance: number | null, page: number, pageSize: number) =>
+        queryNewsUncached({
+            category: category ?? undefined,
+            importance: importance ?? undefined,
+            page,
+            pageSize,
+        }),
+    ['news-query'],
+    {
+        revalidate: NEWS_CACHE_REVALIDATE_SECONDS,
+        tags: ['news'],
+    }
+);
+
+export async function queryNews(options: NewsQueryOptions = {}) {
+    const {category, importance, page = 1, pageSize = 20} = options;
+    return queryNewsCached(category ?? null, importance ?? null, page, pageSize);
+}
+
+async function queryTopNewsUncached(limit = 5) {
     return db
         .select()
         .from(news)
         .where(and(eq(news.isPublished, true), eq(news.importance, 1)))
         .orderBy(desc(news.publishedAt))
         .limit(limit);
+}
+
+const queryTopNewsCached = unstable_cache(
+    async (limit: number) => queryTopNewsUncached(limit),
+    ['top-news-query'],
+    {
+        revalidate: NEWS_CACHE_REVALIDATE_SECONDS,
+        tags: ['news'],
+    }
+);
+
+export async function queryTopNews(limit = 5) {
+    return queryTopNewsCached(limit);
 }
 
 export async function queryRecentNews(since: Date, limit = 50) {
@@ -196,6 +260,11 @@ export async function queryRecentNews(since: Date, limit = 50) {
         .where(and(eq(news.isPublished, true), gte(news.publishedAt, since)))
         .orderBy(desc(news.publishedAt))
         .limit(limit);
+}
+
+export async function getNewsById(id: string) {
+    const rows = await db.select().from(news).where(eq(news.id, id)).limit(1);
+    return rows[0] ?? null;
 }
 
 // ─── Purge ──────────────────────────────────────────

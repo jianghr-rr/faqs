@@ -1,7 +1,8 @@
 'use server';
 
 import {and, count, desc, eq} from 'drizzle-orm';
-import {createClient} from '~/lib/supabase/server';
+import {toIsoString} from '~/lib/date';
+import {getCurrentUser} from '~/lib/supabase/server';
 import {db} from '~/db';
 import {userFavorites, faqs, categories, news} from '~/db/schema';
 
@@ -10,10 +11,7 @@ const MAX_FAVORITES = 100;
 type ItemType = 'faq' | 'news';
 
 async function getAuthUserId(): Promise<string> {
-    const supabase = await createClient();
-    const {
-        data: {user},
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) throw new Error('Unauthorized');
     return user.id;
 }
@@ -21,10 +19,11 @@ async function getAuthUserId(): Promise<string> {
 export async function addFavorite(itemType: ItemType, itemId: string) {
     const userId = await getAuthUserId();
 
-    const [{total}] = await db
+    const countResult = await db
         .select({total: count()})
         .from(userFavorites)
         .where(eq(userFavorites.userId, userId));
+    const total = countResult[0]?.total ?? 0;
 
     if (total >= MAX_FAVORITES) {
         return {error: '收藏数量已达上限（100 条），请先取消部分收藏'};
@@ -106,7 +105,7 @@ export async function getFavorites(options?: {
 
     const where = and(...conditions);
 
-    const [items, [{total}]] = await Promise.all([
+    const [items, countResult] = await Promise.all([
         db
             .select()
             .from(userFavorites)
@@ -116,6 +115,7 @@ export async function getFavorites(options?: {
             .offset(offset),
         db.select({total: count()}).from(userFavorites).where(where),
     ]);
+    const total = countResult[0]?.total ?? 0;
 
     const enriched = await Promise.all(
         items.map(async (fav) => {
@@ -135,14 +135,14 @@ export async function getFavorites(options?: {
 
                 return {
                     ...fav,
-                    createdAt: fav.createdAt.toISOString(),
+                    createdAt: toIsoString(fav.createdAt),
                     item: faq
                         ? {
                               id: faq.id,
                               question: faq.question,
                               status: faq.status,
                               categoryName: faq.categoryName,
-                              updatedAt: faq.updatedAt.toISOString(),
+                              updatedAt: toIsoString(faq.updatedAt),
                           }
                         : null,
                 };
@@ -163,17 +163,17 @@ export async function getFavorites(options?: {
 
                 return {
                     ...fav,
-                    createdAt: fav.createdAt.toISOString(),
+                    createdAt: toIsoString(fav.createdAt),
                     item: n
                         ? {
                               ...n,
-                              publishedAt: n.publishedAt.toISOString(),
+                              publishedAt: toIsoString(n.publishedAt),
                           }
                         : null,
                 };
             }
 
-            return {...fav, createdAt: fav.createdAt.toISOString(), item: null};
+            return {...fav, createdAt: toIsoString(fav.createdAt), item: null};
         })
     );
 
