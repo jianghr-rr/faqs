@@ -79,9 +79,16 @@ jobs:
                         -e DIRECT_URL='${{ secrets.DIRECT_URL }}' \
                         -e API_BASE_URL='${{ secrets.API_BASE_URL }}' \
                         -e NEXT_PUBLIC_APP_URL='${{ secrets.NEXT_PUBLIC_APP_URL }}' \
-                        -e APP_ORIGIN='${{ secrets.NEXT_PUBLIC_APP_URL }}' \
+                        -e APP_ORIGIN='${{ secrets.APP_ORIGIN }}' \
                         -e FINNHUB_API_KEY='${{ secrets.FINNHUB_API_KEY }}' \
                         -e CRON_SECRET='${{ secrets.CRON_SECRET }}' \
+                        -e OPENAI_API_KEY='${{ secrets.OPENAI_API_KEY }}' \
+                        -e OPENAI_BASE_URL='${{ secrets.OPENAI_BASE_URL }}' \
+                        -e OPENAI_MODEL='${{ secrets.OPENAI_MODEL }}' \
+                        -e TAVILY_API_KEY='${{ secrets.TAVILY_API_KEY }}' \
+                        -e TAVILY_ALLOWED_DOMAINS='${{ secrets.TAVILY_ALLOWED_DOMAINS }}' \
+                        -e TAVILY_CACHE_TTL_SECONDS='${{ secrets.TAVILY_CACHE_TTL_SECONDS }}' \
+                        -e TAVILY_MAX_RESULTS='${{ secrets.TAVILY_MAX_RESULTS }}' \
                         ccr.ccs.tencentyun.com/jianghr/faqs-web:${{ steps.img.outputs.tag }}
 
                       docker image prune -f
