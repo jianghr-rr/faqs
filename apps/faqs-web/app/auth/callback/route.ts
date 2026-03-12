@@ -2,6 +2,8 @@ import {NextResponse} from 'next/server';
 import {createServerClient} from '@supabase/ssr';
 import {cookies} from 'next/headers';
 
+const AUTH_EXCHANGE_TIMEOUT_MS = 5000;
+
 export async function GET(request: Request) {
     const url = new URL(request.url);
     const searchParams = url.searchParams;
@@ -34,15 +36,40 @@ export async function GET(request: Request) {
             }
         );
 
-        const {error} = await supabase.auth.exchangeCodeForSession(code);
-        if (!error) {
-            return NextResponse.redirect(`${origin}${next}`);
-        }
+        try {
+            const exchangeRequest = supabase.auth.exchangeCodeForSession(code);
+            const exchangeResult = await Promise.race([
+                exchangeRequest,
+                new Promise<null>((resolve) => {
+                    setTimeout(() => resolve(null), AUTH_EXCHANGE_TIMEOUT_MS);
+                }),
+            ]);
 
-        console.error('[auth/callback] exchangeCodeForSession failed:', error.message);
-        const errorUrl = new URL(`${origin}/login`);
-        errorUrl.searchParams.set('error', error.message);
-        return NextResponse.redirect(errorUrl.toString());
+            if (exchangeResult === null) {
+                console.warn(
+                    `[auth/callback] exchangeCodeForSession timed out after ${AUTH_EXCHANGE_TIMEOUT_MS}ms`
+                );
+                const timeoutUrl = new URL(`${origin}/login`);
+                timeoutUrl.searchParams.set('error', 'auth_exchange_timeout');
+                return NextResponse.redirect(timeoutUrl.toString());
+            }
+
+            const {error} = exchangeResult;
+            if (!error) {
+                return NextResponse.redirect(`${origin}${next}`);
+            }
+
+            console.error('[auth/callback] exchangeCodeForSession failed:', error.message);
+            const errorUrl = new URL(`${origin}/login`);
+            errorUrl.searchParams.set('error', error.message);
+            return NextResponse.redirect(errorUrl.toString());
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error('[auth/callback] exchangeCodeForSession crashed:', message);
+            const errorUrl = new URL(`${origin}/login`);
+            errorUrl.searchParams.set('error', 'auth_exchange_failed');
+            return NextResponse.redirect(errorUrl.toString());
+        }
     }
 
     return NextResponse.redirect(`${origin}/login?error=missing_code`);

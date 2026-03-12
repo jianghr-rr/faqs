@@ -19,6 +19,7 @@ build
 .env
 .env*.local
 apps/faqs-web/scripts/admin-accounts.local.json
+apps/faqs-web/scripts/local-auth-users.json
 
 # Logs
 logs/

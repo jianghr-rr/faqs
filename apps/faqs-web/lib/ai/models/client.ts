@@ -357,12 +357,16 @@ export async function searchWebNewsContext(input: {rawText: string; keywords: st
         return cached;
     }
 
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
+        const controller = new AbortController();
+        timeoutId = setTimeout(() => controller.abort(), env.TAVILY_TIMEOUT_MS);
         const response = await fetch('https://api.tavily.com/search', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
+            signal: controller.signal,
             body: JSON.stringify({
                 api_key: env.TAVILY_API_KEY,
                 query,
@@ -426,8 +430,16 @@ export async function searchWebNewsContext(input: {rawText: string; keywords: st
         cache.set(cacheKey, result, env.TAVILY_CACHE_TTL_SECONDS);
         return result;
     } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+            console.warn(`[ai] tavily web search timeout after ${env.TAVILY_TIMEOUT_MS}ms`);
+            return {query, results: []} satisfies TavilySearchResult;
+        }
         console.error('[ai] tavily web search failed:', error);
         return {query, results: []} satisfies TavilySearchResult;
+    } finally {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
     }
 }
 

@@ -91,7 +91,11 @@ jobs:
                         -e TAVILY_ALLOWED_DOMAINS='${{ secrets.TAVILY_ALLOWED_DOMAINS }}' \
                         -e TAVILY_CACHE_TTL_SECONDS='${{ secrets.TAVILY_CACHE_TTL_SECONDS || 1800 }}' \
                         -e TAVILY_MAX_RESULTS='${{ secrets.TAVILY_MAX_RESULTS || 5 }}' \
-                        ccr.ccs.tencentyun.com/jianghr/faqs-web:${{ steps.img.outputs.tag }}
+                        -e LOCAL_AUTH_ENABLED='${{ secrets.LOCAL_AUTH_ENABLED }}' \
+                        -e LOCAL_AUTH_SESSION_SECRET='${{ secrets.LOCAL_AUTH_SESSION_SECRET }}' \
+                        -e LOCAL_AUTH_USERS_JSON_B64='${{ secrets.LOCAL_AUTH_USERS_JSON_B64 }}' \
+                        ccr.ccs.tencentyun.com/jianghr/faqs-web:${{ steps.img.outputs.tag }} \
+                        sh -lc 'mkdir -p apps/faqs-web/scripts && if [ -n "$LOCAL_AUTH_USERS_JSON_B64" ]; then echo "$LOCAL_AUTH_USERS_JSON_B64" | base64 -d > apps/faqs-web/scripts/local-auth-users.json; fi && node apps/faqs-web/server.js'
 
                       docker image prune -f
 

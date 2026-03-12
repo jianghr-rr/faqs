@@ -5,9 +5,16 @@ import {rewriteChatQuery} from '~/lib/ai/models/client';
 import type {ChatHistoryTurn} from '~/lib/ai/prompts/research';
 import {toIsoString} from '~/lib/date';
 import {getNewsById} from '~/lib/news/service';
-import type {ResearchEvidence} from '~/lib/kg/types';
+import type {ResearchEvidence, ResearchTraceStep} from '~/lib/kg/types';
 import {mapNewsToAnalysisInput, mapQueryToAnalysisInput} from './mapper';
 import {getNewsAnalysisSnapshot, upsertNewsAnalysisSnapshot} from './repository';
+
+const inFlightNewsAnalysisById = new Map<string, Promise<Record<string, unknown>>>();
+
+function hasTracePayload(payload: Record<string, unknown>) {
+    const trace = payload.trace;
+    return Boolean(trace && typeof trace === 'object' && !Array.isArray(trace));
+}
 
 function toSearchMetadata(workflowResult: Awaited<ReturnType<typeof runResearchWorkflow>>) {
     return {
@@ -40,7 +47,12 @@ function withNewsAnalysisCache(
     };
 }
 
-export async function analyzeNewsById(newsId: string, options?: {forceReanalyze?: boolean}) {
+type AnalyzeNewsOptions = {
+    forceReanalyze?: boolean;
+    onTraceStep?: (step: ResearchTraceStep) => void;
+};
+
+async function analyzeNewsByIdInternal(newsId: string, options?: AnalyzeNewsOptions) {
     const news = await getNewsById(newsId);
     if (!news) {
         throw new Error('NEWS_NOT_FOUND');
@@ -50,11 +62,15 @@ export async function analyzeNewsById(newsId: string, options?: {forceReanalyze?
     if (!forceReanalyze) {
         const snapshot = await getNewsAnalysisSnapshot(newsId);
         if (snapshot) {
-            return withNewsAnalysisCache(snapshot.payload, {
-                hit: true,
-                forced: false,
-                analyzedAt: snapshot.analyzedAt,
-            });
+            if (!hasTracePayload(snapshot.payload)) {
+                console.info(`[research] snapshot missing trace, reanalyzing newsId=${newsId}`);
+            } else {
+                return withNewsAnalysisCache(snapshot.payload, {
+                    hit: true,
+                    forced: false,
+                    analyzedAt: snapshot.analyzedAt,
+                });
+            }
         }
     }
 
@@ -67,6 +83,7 @@ export async function analyzeNewsById(newsId: string, options?: {forceReanalyze?
         tickers: input.tickers,
         securityHints: input.securityHints,
         tags: input.tags,
+        onTraceStep: options?.onTraceStep,
     });
 
     const payload = {
@@ -84,6 +101,7 @@ export async function analyzeNewsById(newsId: string, options?: {forceReanalyze?
         observation: workflowResult.observation,
         resultMeta: toResultMeta(workflowResult),
         searchMetadata: toSearchMetadata(workflowResult),
+        trace: workflowResult.trace,
     };
 
     const analyzedAt = new Date();
@@ -101,6 +119,26 @@ export async function analyzeNewsById(newsId: string, options?: {forceReanalyze?
         forced: forceReanalyze,
         analyzedAt,
     });
+}
+
+export async function analyzeNewsById(newsId: string, options?: AnalyzeNewsOptions) {
+    if (options?.onTraceStep) {
+        return analyzeNewsByIdInternal(newsId, options);
+    }
+
+    const inFlight = inFlightNewsAnalysisById.get(newsId);
+    if (inFlight) {
+        console.info(`[research] reuse in-flight news analysis for newsId=${newsId}`);
+        return inFlight;
+    }
+
+    const task = analyzeNewsByIdInternal(newsId, options).finally(() => {
+        if (inFlightNewsAnalysisById.get(newsId) === task) {
+            inFlightNewsAnalysisById.delete(newsId);
+        }
+    });
+    inFlightNewsAnalysisById.set(newsId, task);
+    return task;
 }
 
 export async function analyzeQuery(query: string, options?: {history?: ChatHistoryTurn[]}) {
@@ -135,6 +173,7 @@ export async function analyzeQuery(query: string, options?: {history?: ChatHisto
         observation: workflowResult.observation,
         resultMeta: toResultMeta(workflowResult),
         searchMetadata: toSearchMetadata(workflowResult),
+        trace: workflowResult.trace,
     };
 }
 

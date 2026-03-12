@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import {usePathname, useRouter} from 'next/navigation';
 import {Home, MessageCircle, BarChart3, User, Loader2} from 'lucide-react';
-import type {User as SupabaseUser} from '@supabase/supabase-js';
+import type {AppUser} from '~/lib/auth/types';
 import {useEffect, useState, useTransition} from 'react';
 
 const tabs = [
@@ -23,7 +23,7 @@ function isModifiedEvent(event: React.MouseEvent<HTMLAnchorElement>) {
     return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
 }
 
-export function BottomTabs({user, className = ''}: {user: SupabaseUser | null; className?: string}) {
+export function BottomTabs({user, className = ''}: {user: AppUser | null; className?: string}) {
     const pathname = usePathname();
     const router = useRouter();
     const [pendingHref, setPendingHref] = useState<string | null>(null);

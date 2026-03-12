@@ -22,6 +22,22 @@ import type {
     SecurityRecord,
 } from './types';
 
+const KG_CATALOG_CACHE_TTL_MS = 30_000;
+
+type KgCatalogSnapshot = {
+    entities: Awaited<ReturnType<typeof listEntitiesWithAliases>>['entities'];
+    aliases: Awaited<ReturnType<typeof listEntitiesWithAliases>>['aliases'];
+    allSecurities: SecurityRecord[];
+};
+
+let kgCatalogCache:
+    | {
+          expiresAt: number;
+          value: KgCatalogSnapshot;
+      }
+    | undefined;
+let kgCatalogInFlight: Promise<KgCatalogSnapshot> | undefined;
+
 type AnalyzeInput = {
     text: string;
     tickers?: string[];
@@ -82,6 +98,29 @@ function inferExchangeFromStockCode(stockCode: string) {
 
 function buildSyntheticCompanyId(stockCode: string, companyName: string) {
     return `fallback:${stockCode}:${normalizeToken(companyName) || 'unknown'}`;
+}
+
+async function getKgCatalogSnapshot() {
+    const now = Date.now();
+    if (kgCatalogCache && kgCatalogCache.expiresAt > now) {
+        return kgCatalogCache.value;
+    }
+
+    if (!kgCatalogInFlight) {
+        kgCatalogInFlight = (async () => {
+            const [{entities, aliases}, allSecurities] = await Promise.all([listEntitiesWithAliases(), listSecurities()]);
+            const snapshot: KgCatalogSnapshot = {entities, aliases, allSecurities};
+            kgCatalogCache = {
+                value: snapshot,
+                expiresAt: Date.now() + KG_CATALOG_CACHE_TTL_MS,
+            };
+            return snapshot;
+        })().finally(() => {
+            kgCatalogInFlight = undefined;
+        });
+    }
+
+    return kgCatalogInFlight;
 }
 
 export async function searchKgEntities(keyword: string): Promise<KgSearchResult> {
@@ -175,9 +214,8 @@ export async function resolveFallbackStocksFromMentions(input: {
         return [];
     }
 
-    const [{entities, aliases}, allSecurities, tickerSecurities] = await Promise.all([
-        listEntitiesWithAliases(),
-        listSecurities(),
+    const [{entities, aliases, allSecurities}, tickerSecurities] = await Promise.all([
+        getKgCatalogSnapshot(),
         getSecuritiesByStockCodes(tickerHints),
     ]);
     const aliasMap = new Map<string, string[]>();
@@ -304,7 +342,7 @@ export async function analyzeKgText(input: AnalyzeInput): Promise<KgAnalysisResu
     const directIndustryIds = new Set<string>();
     const directCompanyIds = new Set<string>();
 
-    const [{entities, aliases}, allSecurities] = await Promise.all([listEntitiesWithAliases(), listSecurities()]);
+    const {entities, aliases, allSecurities} = await getKgCatalogSnapshot();
 
     const aliasMap = new Map<string, string[]>();
     for (const alias of aliases) {

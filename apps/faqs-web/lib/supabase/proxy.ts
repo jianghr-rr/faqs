@@ -3,6 +3,19 @@ import {createServerClient} from '@supabase/ssr';
 
 const AUTH_LOOKUP_TIMEOUT_MS = 1500;
 
+function isExpectedAnonymousAuthError(error: unknown) {
+    if (!(error instanceof Error)) {
+        return false;
+    }
+
+    const maybeAuthError = error as {name?: string; code?: string; cause?: {code?: string}};
+    return (
+        maybeAuthError.name === 'AuthSessionMissingError' ||
+        maybeAuthError.code === 'AuthSessionMissingError' ||
+        maybeAuthError.cause?.code === 'UND_ERR_CONNECT_TIMEOUT'
+    );
+}
+
 export async function updateSession(request: NextRequest, response: NextResponse) {
     const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -45,6 +58,9 @@ export async function updateSession(request: NextRequest, response: NextResponse
     } = authResult;
 
     if (error) {
+        if (isExpectedAnonymousAuthError(error)) {
+            return {supabase, user: null, response, authError: true};
+        }
         console.error('[proxy] auth lookup failed:', error);
         return {supabase, user: null, response, authError: true};
     }

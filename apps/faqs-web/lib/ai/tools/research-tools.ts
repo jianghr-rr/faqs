@@ -85,16 +85,22 @@ export async function searchKgContextTool(input: {keywords: string[]}) {
         }
     >();
 
-    for (const keyword of input.keywords) {
-        const result = await searchKgEntities(keyword);
-        for (const item of result.items) {
-            if (!dedupEntities.has(item.id)) {
-                dedupEntities.set(item.id, {
-                    id: item.id,
-                    name: item.name,
-                    entityType: item.entityType,
-                    aliases: item.aliases.slice(0, 3),
-                });
+    const normalizedKeywords = [...new Set(input.keywords.map((item) => item.trim()).filter(Boolean))];
+    const CONCURRENCY = 4;
+
+    for (let i = 0; i < normalizedKeywords.length; i += CONCURRENCY) {
+        const batch = normalizedKeywords.slice(i, i + CONCURRENCY);
+        const batchResults = await Promise.all(batch.map((keyword) => searchKgEntities(keyword)));
+        for (const result of batchResults) {
+            for (const item of result.items) {
+                if (!dedupEntities.has(item.id)) {
+                    dedupEntities.set(item.id, {
+                        id: item.id,
+                        name: item.name,
+                        entityType: item.entityType,
+                        aliases: item.aliases.slice(0, 3),
+                    });
+                }
             }
         }
     }

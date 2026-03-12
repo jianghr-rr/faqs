@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import {usePathname, useRouter} from 'next/navigation';
-import type {User} from '@supabase/supabase-js';
+import type {AppUser} from '~/lib/auth/types';
 import {LogOut, Settings, Star, ChevronDown, Loader2} from 'lucide-react';
 import {useState, useRef, useEffect, useTransition} from 'react';
 import {signOut} from '~/actions/auth';
@@ -31,7 +31,7 @@ function isModifiedEvent(event: React.MouseEvent<HTMLAnchorElement>) {
     return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
 }
 
-export function TopNavbar({user, className = ''}: {user: User | null; className?: string}) {
+export function TopNavbar({user, className = ''}: {user: AppUser | null; className?: string}) {
     const pathname = usePathname();
     const router = useRouter();
     const [menuOpen, setMenuOpen] = useState(false);
@@ -128,9 +128,9 @@ export function TopNavbar({user, className = ''}: {user: User | null; className?
                                 onClick={() => setMenuOpen(!menuOpen)}
                                 className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-bg-hover"
                             >
-                                {user.user_metadata?.avatar_url ? (
+                                {user.avatar ? (
                                     <img
-                                        src={user.user_metadata.avatar_url}
+                                        src={user.avatar}
                                         alt=""
                                         className="h-8 w-8 rounded-full"
                                     />
@@ -146,7 +146,7 @@ export function TopNavbar({user, className = ''}: {user: User | null; className?
                                 <div className="absolute right-0 top-full mt-1 w-48 rounded-lg border border-border bg-bg-card py-1 shadow-lg">
                                     <div className="border-b border-border px-4 py-2">
                                         <p className="truncate text-sm font-medium text-text-primary">
-                                            {user.user_metadata?.name ?? user.email?.split('@')[0]}
+                                            {user.name ?? user.email.split('@')[0]}
                                         </p>
                                         <p className="truncate text-xs text-text-secondary">{user.email}</p>
                                     </div>

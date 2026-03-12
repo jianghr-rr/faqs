@@ -25,6 +25,7 @@ const envSchema = z.object({
     TAVILY_ALLOWED_DOMAINS: z.string().optional(),
     TAVILY_CACHE_TTL_SECONDS: z.coerce.number().positive().optional().default(1800),
     TAVILY_MAX_RESULTS: z.coerce.number().positive().optional().default(5),
+    TAVILY_TIMEOUT_MS: z.coerce.number().positive().optional().default(2500),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -100,6 +100,26 @@ export type ModelObservation = {
     risks: string[];
 };
 
+export type ResearchTraceStepStatus = 'done' | 'skipped' | 'failed';
+
+export type ResearchTraceStep = {
+    name: string;
+    label: string;
+    status: ResearchTraceStepStatus;
+    elapsedMs: number;
+    summary: string;
+};
+
+export type ResearchTrace = {
+    version: 'v1';
+    requestId: string;
+    mode: 'news_analysis' | 'chat_research';
+    startedAt: string;
+    finishedAt: string;
+    elapsedMs: number;
+    steps: ResearchTraceStep[];
+};
+
 export type KgSearchResult = {
     items: Array<
         KgEntityRecord & {

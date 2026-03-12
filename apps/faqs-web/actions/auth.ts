@@ -3,6 +3,7 @@
 import {redirect} from 'next/navigation';
 import {headers} from 'next/headers';
 import {createClient, getCurrentUser} from '~/lib/supabase/server';
+import {clearLocalSession, findLocalAuthAccount, setLocalSession, verifyLocalAuthPassword} from '~/lib/auth/local-server';
 
 const EXTERNAL_TIMEOUT_MESSAGE = '链接外网容易超时，请重试';
 
@@ -120,11 +121,33 @@ export async function verifyPhoneOtp(phone: string, token: string, next?: string
 }
 
 export async function signInWithPassword(email: string, password: string, next?: string) {
+    const normalizedEmail = email.trim().toLowerCase();
+
     try {
+        const localAccount = findLocalAuthAccount(normalizedEmail);
+        if (localAccount) {
+            const localUser = await verifyLocalAuthPassword(normalizedEmail, password);
+            if (!localUser) {
+                return {error: '账号或密码错误'};
+            }
+
+            await setLocalSession(localUser);
+
+            try {
+                const supabase = await createClient();
+                await supabase.auth.signOut();
+            } catch {
+                // best-effort only: local login should not depend on Supabase network
+            }
+
+            redirect(next && next.startsWith('/') ? next : '/');
+        }
+
+        await clearLocalSession();
         const supabase = await createClient();
 
         const {error} = await supabase.auth.signInWithPassword({
-            email,
+            email: normalizedEmail,
             password,
         });
 
@@ -139,8 +162,15 @@ export async function signInWithPassword(email: string, password: string, next?:
 }
 
 export async function signOut() {
-    const supabase = await createClient();
-    await supabase.auth.signOut();
+    await clearLocalSession();
+
+    try {
+        const supabase = await createClient();
+        await supabase.auth.signOut();
+    } catch {
+        // best-effort only
+    }
+
     redirect('/');
 }
 
@@ -149,17 +179,13 @@ export async function getCurrentProfile() {
 
     if (!user) return null;
 
-    const name =
-        user.user_metadata?.name ??
-        user.user_metadata?.full_name ??
-        user.email?.split('@')[0] ??
-        (user.phone ? `****${user.phone.replace(/\D/g, '').slice(-4)}` : '用户');
-
     return {
         id: user.id,
         email: user.email,
-        phone: user.phone ?? undefined,
-        name,
-        avatar: user.user_metadata?.avatar_url,
+        phone: user.phone,
+        name: user.name || user.email.split('@')[0] || '用户',
+        avatar: user.avatar,
+        authSource: user.authSource,
+        role: user.role,
     };
 }

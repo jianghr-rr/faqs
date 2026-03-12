@@ -1,6 +1,7 @@
 import {type NextRequest, NextResponse} from 'next/server';
 import {i18nRouter} from 'next-i18n-router';
 import {updateSession} from '~/lib/supabase/proxy';
+import {getLocalSessionUserFromRequest} from '~/lib/auth/local-proxy';
 import i18nConfig from './i18nConfig';
 
 const protectedRoutes = ['/analysis', '/chat', '/my-faqs', '/settings', '/favorites'];
@@ -15,6 +16,11 @@ export async function proxy(request: NextRequest) {
     );
 
     if (!isProtectedRoute) {
+        return i18nResponse;
+    }
+
+    const localUser = await getLocalSessionUserFromRequest(request);
+    if (localUser) {
         return i18nResponse;
     }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {ExternalLink, Loader2, Search} from 'lucide-react';
 
 type AnalysisMode = 'news' | 'query';
@@ -70,7 +70,29 @@ type AnalysisResult = {
         forced: boolean;
         analyzedAt: string;
     };
+    trace?: {
+        version: 'v1';
+        requestId: string;
+        mode: 'news_analysis' | 'chat_research';
+        startedAt: string;
+        finishedAt: string;
+        elapsedMs: number;
+        steps: Array<{
+            name: string;
+            label: string;
+            status: 'done' | 'skipped' | 'failed';
+            elapsedMs: number;
+            summary: string;
+        }>;
+    };
 };
+
+type TraceViewModel = NonNullable<AnalysisResult['trace']>;
+type AnalyzeNewsStreamEvent =
+    | {type: 'trace_start'; data: {mode: 'news_analysis'; startedAt: string}}
+    | {type: 'trace_step'; data: TraceViewModel['steps'][number]}
+    | {type: 'final'; data: AnalysisResult}
+    | {type: 'error'; error: {code: string; message: string}};
 
 function ResultBadge({label, value}: {label: string; value: string}) {
     return (
@@ -102,6 +124,32 @@ function formatDateTime(dateStr: string) {
     }
 
     return date.toLocaleString('zh-CN', {hour12: false});
+}
+
+function getTraceStatusLabel(status: 'done' | 'skipped' | 'failed') {
+    switch (status) {
+        case 'done':
+            return '完成';
+        case 'skipped':
+            return '跳过';
+        case 'failed':
+            return '失败';
+        default:
+            return status;
+    }
+}
+
+function getTraceStatusClassName(status: 'done' | 'skipped' | 'failed') {
+    switch (status) {
+        case 'done':
+            return 'bg-accent/10 text-accent';
+        case 'skipped':
+            return 'bg-bg-hover text-text-secondary';
+        case 'failed':
+            return 'bg-danger/10 text-danger';
+        default:
+            return 'bg-bg-hover text-text-secondary';
+    }
 }
 
 const QUERY_SUGGESTIONS = [
@@ -170,8 +218,12 @@ export function AnalysisView({
     const [newsId, setNewsId] = useState(initialNewsId ?? '');
     const [query, setQuery] = useState(initialQuery ?? '');
     const [result, setResult] = useState<AnalysisResult | null>(null);
+    const [liveTrace, setLiveTrace] = useState<TraceViewModel | null>(null);
+    const [traceCollapsed, setTraceCollapsed] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const inFlightRequestKeyRef = useRef<string | null>(null);
+    const initialAutoRunKeyRef = useRef<string | null>(null);
 
     const entityGroups = useMemo(() => result?.matchedEntities ?? result?.resolvedEntities, [result]);
     const resultStats = useMemo(
@@ -187,8 +239,20 @@ export function AnalysisView({
 
     const runAnalysis = useCallback(
         async (nextMode = mode, options?: {forceReanalyze?: boolean}) => {
+            const forceReanalyze = options?.forceReanalyze === true;
+            const requestKey =
+                nextMode === 'news'
+                    ? `news:${newsId.trim()}:force:${forceReanalyze}`
+                    : `query:${query.trim()}:force:${forceReanalyze}`;
+            if (inFlightRequestKeyRef.current === requestKey) {
+                return;
+            }
+
+            inFlightRequestKeyRef.current = requestKey;
             setLoading(true);
             setError('');
+            setLiveTrace(null);
+            setTraceCollapsed(false);
 
             try {
                 const endpoint = nextMode === 'news' ? '/api/research/analyze-news' : '/api/research/analyze-query';
@@ -196,7 +260,8 @@ export function AnalysisView({
                     nextMode === 'news'
                         ? {
                               newsId,
-                              forceReanalyze: options?.forceReanalyze === true,
+                              forceReanalyze,
+                              stream: true,
                           }
                         : {query};
 
@@ -206,27 +271,127 @@ export function AnalysisView({
                     body: JSON.stringify(body),
                 });
 
-                const payload = await response.json();
-                if (!response.ok) {
-                    throw new Error(payload?.error?.message ?? '分析失败，请稍后重试');
-                }
+                const isStreamResponse = response.headers.get('content-type')?.includes('application/x-ndjson');
+                if (nextMode === 'news' && isStreamResponse && response.body) {
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    let finalPayload: AnalysisResult | null = null;
+                    let currentTrace: TraceViewModel | null = null;
 
-                setResult(payload);
+                    const consumeEvent = (event: AnalyzeNewsStreamEvent) => {
+                        if (event.type === 'trace_start') {
+                            currentTrace = {
+                                version: 'v1',
+                                requestId: '',
+                                mode: event.data.mode,
+                                startedAt: event.data.startedAt,
+                                finishedAt: '',
+                                elapsedMs: 0,
+                                steps: [],
+                            };
+                            setLiveTrace(currentTrace);
+                            return;
+                        }
+
+                        if (event.type === 'trace_step') {
+                            const baseTrace =
+                                currentTrace ??
+                                ({
+                                    version: 'v1',
+                                    requestId: '',
+                                    mode: 'news_analysis',
+                                    startedAt: new Date().toISOString(),
+                                    finishedAt: '',
+                                    elapsedMs: 0,
+                                    steps: [],
+                                } satisfies TraceViewModel);
+                            const nextTrace: TraceViewModel = {
+                                ...baseTrace,
+                                steps: [...baseTrace.steps, event.data],
+                                elapsedMs: baseTrace.steps.reduce((sum, item) => sum + item.elapsedMs, 0) + event.data.elapsedMs,
+                            };
+                            currentTrace = nextTrace;
+                            setLiveTrace(nextTrace);
+                            return;
+                        }
+
+                        if (event.type === 'final') {
+                            finalPayload = event.data;
+                            return;
+                        }
+
+                        if (event.type === 'error') {
+                            throw new Error(event.error.message || '分析失败，请稍后重试');
+                        }
+                    };
+
+                    while (true) {
+                        const {value, done} = await reader.read();
+                        if (done) {
+                            break;
+                        }
+                        buffer += decoder.decode(value, {stream: true});
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() ?? '';
+                        for (const line of lines) {
+                            const trimmed = line.trim();
+                            if (!trimmed) {
+                                continue;
+                            }
+                            consumeEvent(JSON.parse(trimmed) as AnalyzeNewsStreamEvent);
+                        }
+                    }
+
+                    if (buffer.trim()) {
+                        consumeEvent(JSON.parse(buffer.trim()) as AnalyzeNewsStreamEvent);
+                    }
+
+                    if (!finalPayload) {
+                        throw new Error('流式分析未返回最终结果');
+                    }
+                    setResult(finalPayload);
+                    setLiveTrace(null);
+                    setTraceCollapsed(true);
+                } else {
+                    const payload = await response.json();
+                    if (!response.ok) {
+                        throw new Error(payload?.error?.message ?? '分析失败，请稍后重试');
+                    }
+                    setResult(payload);
+                    setTraceCollapsed(true);
+                }
             } catch (requestError) {
                 setResult(null);
+                setLiveTrace(null);
                 setError(requestError instanceof Error ? requestError.message : '分析失败，请稍后重试');
             } finally {
+                if (inFlightRequestKeyRef.current === requestKey) {
+                    inFlightRequestKeyRef.current = null;
+                }
                 setLoading(false);
             }
         },
         [mode, newsId, query]
     );
 
+    const visibleTrace = liveTrace ?? result?.trace ?? null;
+
     useEffect(() => {
         if (initialNewsId && initialMode === 'news') {
+            const autoRunKey = `auto:news:${initialNewsId}`;
+            if (initialAutoRunKeyRef.current === autoRunKey) {
+                return;
+            }
+            initialAutoRunKeyRef.current = autoRunKey;
             void runAnalysis('news');
         }
         if (initialQuery && initialMode === 'query') {
+            const autoRunKey = `auto:query:${initialQuery}`;
+            if (initialAutoRunKeyRef.current === autoRunKey) {
+                return;
+            }
+            initialAutoRunKeyRef.current = autoRunKey;
             void runAnalysis('query');
         }
     }, [initialMode, initialNewsId, initialQuery, runAnalysis]);
@@ -323,6 +488,58 @@ export function AnalysisView({
             </div>
 
             {error && <div className="mt-4 rounded-xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">{error}</div>}
+
+            {visibleTrace && (
+                <div className="mt-6 rounded-2xl border border-border bg-bg-card p-5">
+                    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                        <h3 className="text-sm font-medium text-text-primary">思考过程</h3>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-bg-hover px-2 py-1 text-[11px] text-text-secondary">
+                                总耗时 {Math.round(visibleTrace.elapsedMs / 100) / 10}s
+                            </span>
+                            <span className="rounded-full bg-bg-hover px-2 py-1 text-[11px] text-text-secondary">
+                                {visibleTrace.steps.length} 个步骤
+                            </span>
+                            {!liveTrace && (
+                                <button
+                                    type="button"
+                                    onClick={() => setTraceCollapsed((prev) => !prev)}
+                                    className="rounded-full bg-bg-hover px-2 py-1 text-[11px] text-text-secondary transition-colors hover:text-text-primary"
+                                >
+                                    {traceCollapsed ? '展开过程' : '收起过程'}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {traceCollapsed && !liveTrace ? (
+                        <div className="rounded-xl border border-border bg-bg-hover/60 px-4 py-3 text-xs text-text-secondary">
+                            思考过程已收起，点击“展开过程”可查看每一步详情。
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {visibleTrace.steps.map((step, index) => (
+                                <div key={`${step.name}-${index}`} className="rounded-xl border border-border bg-bg-hover/60 p-4">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <div className="text-sm font-medium text-text-primary">{index + 1}. {step.label}</div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="rounded-full bg-bg-card px-2 py-1 text-[11px] text-text-secondary">
+                                                {step.elapsedMs} ms
+                                            </span>
+                                            <span
+                                                className={`rounded-full px-2 py-1 text-[11px] font-medium ${getTraceStatusClassName(step.status)}`}
+                                            >
+                                                {getTraceStatusLabel(step.status)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div className="mt-2 text-xs leading-6 text-text-secondary">{step.summary}</div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
 
             {result && (
                 <div className="mt-6 space-y-5">

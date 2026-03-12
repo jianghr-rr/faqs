@@ -22,6 +22,9 @@ import type {
     ResearchEvidence,
     ResearchReport,
     ResearchResultMeta,
+    ResearchTrace,
+    ResearchTraceStep,
+    ResearchTraceStepStatus,
 } from '~/lib/kg/types';
 
 const ResearchWorkflowStateAnnotation = Annotation.Root({
@@ -48,6 +51,182 @@ const ResearchWorkflowStateAnnotation = Annotation.Root({
 });
 
 type ResearchWorkflowState = typeof ResearchWorkflowStateAnnotation.State;
+type ResearchWorkflowNode = (
+    state: ResearchWorkflowState
+) => Promise<Partial<ResearchWorkflowState> | ResearchWorkflowState>;
+type WorkflowTraceCollector = {
+    startedAt: number;
+    steps: ResearchTraceStep[];
+};
+
+const traceCollectors = new Map<string, WorkflowTraceCollector>();
+const traceStepListeners = new Map<string, (step: ResearchTraceStep) => void | Promise<void>>();
+
+const NODE_LABEL_MAP: Record<string, string> = {
+    extractNewsHints: '提取新闻线索',
+    webSearchContext: '外部搜索补充',
+    extractGroundedHints: '基于证据二次提炼',
+    searchKgContext: '图谱上下文检索',
+    resolveEntities: '实体命中与扩展',
+    validateSectorRelevance: '行业相关性校验',
+    fillFallbackStocks: '低置信标的补全',
+    rankStocks: '规则排序',
+    rerankStocks: '模型重排',
+    generateReport: '生成结构化结论',
+    generateObservation: '生成观察结论',
+};
+
+function logNodeStart(requestId: string, nodeName: string) {
+    console.info(`[research-workflow] requestId=${requestId} node=${nodeName} phase=start`);
+}
+
+function logNodeSuccess(requestId: string, nodeName: string, elapsedMs: number) {
+    console.info(`[research-workflow] requestId=${requestId} node=${nodeName} phase=done elapsedMs=${elapsedMs}`);
+}
+
+function logNodeError(requestId: string, nodeName: string, elapsedMs: number, error: unknown) {
+    console.error(`[research-workflow] requestId=${requestId} node=${nodeName} phase=error elapsedMs=${elapsedMs}`, error);
+}
+
+function isEmptyNodeResult(result: Partial<ResearchWorkflowState> | ResearchWorkflowState) {
+    return Object.keys(result).length === 0;
+}
+
+function summarizeNodeResult(
+    nodeName: string,
+    state: ResearchWorkflowState,
+    result: Partial<ResearchWorkflowState> | ResearchWorkflowState
+) {
+    switch (nodeName) {
+        case 'extractNewsHints': {
+            const nextKeywords = result.searchKeywords ?? [];
+            const sample = nextKeywords.slice(0, 3).join('、');
+            const angle = result.analysisAngle ? `，角度「${result.analysisAngle}」` : '';
+            return sample
+                ? `提取 ${nextKeywords.length} 个关键词（${sample}）${angle}`
+                : `未提取到有效关键词${angle}`;
+        }
+        case 'webSearchContext': {
+            const evidenceCount = (result.webSearchEvidence ?? []).length;
+            const query = result.webSearchQuery || state.webSearchQuery;
+            if (evidenceCount === 0) {
+                return query ? `检索查询已执行（${query}），未返回有效外部证据` : '未返回有效外部证据';
+            }
+            return query ? `检索查询：${query}，获取外部证据 ${evidenceCount} 条` : `获取外部证据 ${evidenceCount} 条`;
+        }
+        case 'extractGroundedHints': {
+            if (isEmptyNodeResult(result)) {
+                return '无可用外部证据，已跳过';
+            }
+            const before = state.searchKeywords.length;
+            const after = (result.searchKeywords ?? state.searchKeywords).length;
+            return `基于外部证据重写关键词：${before} -> ${after}`;
+        }
+        case 'searchKgContext': {
+            if (result.kgCoverageMiss) {
+                return '图谱覆盖不足，跳过上下文扩展';
+            }
+            const tags = (result.searchContextTags ?? []).length;
+            return `使用 ${state.searchKeywords.slice(0, 8).length} 个关键词检索图谱，上下文标签 ${tags} 个`;
+        }
+        case 'resolveEntities': {
+            const themes = (result.matchedEntities?.themes ?? []).length;
+            const industries = (result.matchedEntities?.industries ?? []).length;
+            const chainNodes = (result.matchedEntities?.chainNodes ?? []).length;
+            const companies = (result.matchedEntities?.companies ?? []).length;
+            const reasoning = (result.reasoningPaths ?? []).length;
+            const candidates = (result.candidateStocks ?? []).length;
+            return `命中主题 ${themes}、行业 ${industries}、环节 ${chainNodes}、公司 ${companies}；推理 ${reasoning} 条，候选 ${candidates} 个`;
+        }
+        case 'validateSectorRelevance': {
+            if (isEmptyNodeResult(result)) {
+                return '无行业命中或无需校验，已跳过';
+            }
+            const before = state.matchedEntities.industries.length;
+            const industries = (result.matchedEntities?.industries ?? state.matchedEntities.industries).length;
+            return `行业相关性校验后保留 ${industries}/${before} 个行业`;
+        }
+        case 'fillFallbackStocks': {
+            if (isEmptyNodeResult(result)) {
+                if (hasStructuredResult(state) && hasDirectResult(state)) {
+                    return '已有直接图谱命中，跳过低置信补全';
+                }
+                return '无需补全候选';
+            }
+            const before = state.candidateStocks.length;
+            const candidates = (result.candidateStocks ?? state.candidateStocks).length;
+            return `低置信补全后候选：${before} -> ${candidates}`;
+        }
+        case 'rankStocks':
+        case 'rerankStocks': {
+            const ranked = result.candidateStocks ?? state.candidateStocks;
+            const candidates = ranked.length;
+            const top = ranked[0];
+            if (!top) {
+                return '无候选可排序';
+            }
+            return `候选 ${candidates} 个，TOP1：${top.companyName}(${top.stockCode})`;
+        }
+        case 'generateReport': {
+            const reasoningCount = state.reasoningPaths.length;
+            const candidateCount = state.candidateStocks.length;
+            return `已生成 AI 结论（推理 ${reasoningCount} 条，候选 ${candidateCount} 个）`;
+        }
+        case 'generateObservation': {
+            const type = result.observation?.observationType ?? state.observation?.observationType;
+            return type ? `已生成观察结论（类型：${type}）` : '已生成观察结论';
+        }
+        default:
+            return '步骤完成';
+    }
+}
+
+function appendTraceStep(requestId: string, step: ResearchTraceStep) {
+    const collector = traceCollectors.get(requestId);
+    if (!collector) {
+        return;
+    }
+    collector.steps.push(step);
+    const listener = traceStepListeners.get(requestId);
+    if (listener) {
+        void Promise.resolve(listener(step)).catch((error) => {
+            console.warn(`[research-workflow] requestId=${requestId} trace step listener failed:`, error);
+        });
+    }
+}
+
+function withNodeTiming(nodeName: string, node: ResearchWorkflowNode): ResearchWorkflowNode {
+    return async (state) => {
+        const requestId = state.requestId || 'unknown';
+        const start = Date.now();
+        logNodeStart(requestId, nodeName);
+        try {
+            const result = await node(state);
+            const elapsedMs = Date.now() - start;
+            const status: ResearchTraceStepStatus = isEmptyNodeResult(result) ? 'skipped' : 'done';
+            appendTraceStep(requestId, {
+                name: nodeName,
+                label: NODE_LABEL_MAP[nodeName] ?? nodeName,
+                status,
+                elapsedMs,
+                summary: summarizeNodeResult(nodeName, state, result),
+            });
+            logNodeSuccess(requestId, nodeName, elapsedMs);
+            return result;
+        } catch (error) {
+            const elapsedMs = Date.now() - start;
+            appendTraceStep(requestId, {
+                name: nodeName,
+                label: NODE_LABEL_MAP[nodeName] ?? nodeName,
+                status: 'failed',
+                elapsedMs,
+                summary: error instanceof Error ? `失败：${error.message}` : '步骤执行失败',
+            });
+            logNodeError(requestId, nodeName, elapsedMs, error);
+            throw error;
+        }
+    };
+}
 
 function createEmptyMatchedEntities(): KgAnalysisResult['matchedEntities'] {
     return {
@@ -190,7 +369,7 @@ async function searchKgContextNode(state: ResearchWorkflowState) {
     };
 }
 
-function routeAfterSearchKgContext(state: ResearchWorkflowState) {
+function routeAfterSearchKgContext(_state: ResearchWorkflowState) {
     return 'resolveEntities';
 }
 
@@ -321,6 +500,14 @@ async function generateReportNode(state: ResearchWorkflowState) {
             webSearchEvidence: state.webSearchEvidence,
         }),
         resultMeta: (() => {
+            if (!hasStructuredResult(state)) {
+                return {
+                    confidence: 'low',
+                    sourceType: 'model_plus_search',
+                    validationStatus: 'model_only',
+                } satisfies ResearchResultMeta;
+            }
+
             const fallbackOnly = hasFallbackResult(state) && !hasDirectResult(state);
             if (fallbackOnly) {
                 return {
@@ -356,11 +543,12 @@ async function generateModelOnlyObservationNode(state: ResearchWorkflowState) {
 }
 
 function routeAfterRanking(state: ResearchWorkflowState) {
-    if (!hasStructuredResult(state) && state.mode === 'news_analysis' && state.webSearchEvidence.length > 0) {
+    if (!hasStructuredResult(state) && state.mode === 'news_analysis') {
         return 'generateObservation';
     }
 
-    if (state.candidateStocks.length > 1 && Boolean(getEnv().OPENAI_API_KEY)) {
+    // Rerank is an extra LLM call; avoid it for tiny candidate sets.
+    if (state.candidateStocks.length > 2 && Boolean(getEnv().OPENAI_API_KEY)) {
         return 'rerankStocks';
     }
 
@@ -368,17 +556,17 @@ function routeAfterRanking(state: ResearchWorkflowState) {
 }
 
 const researchWorkflowGraph = new StateGraph(ResearchWorkflowStateAnnotation)
-    .addNode('extractNewsHints', extractNewsHintsNode)
-    .addNode('webSearchContext', webSearchContextNode)
-    .addNode('extractGroundedHints', extractGroundedHintsNode)
-    .addNode('searchKgContext', searchKgContextNode)
-    .addNode('resolveEntities', resolveEntitiesNode)
-    .addNode('validateSectorRelevance', validateSectorRelevanceNode)
-    .addNode('fillFallbackStocks', fillFallbackStocksNode)
-    .addNode('rankStocks', rankStocksNode)
-    .addNode('rerankStocks', rerankStocksNode)
-    .addNode('generateReport', generateReportNode)
-    .addNode('generateObservation', generateModelOnlyObservationNode)
+    .addNode('extractNewsHints', withNodeTiming('extractNewsHints', extractNewsHintsNode))
+    .addNode('webSearchContext', withNodeTiming('webSearchContext', webSearchContextNode))
+    .addNode('extractGroundedHints', withNodeTiming('extractGroundedHints', extractGroundedHintsNode))
+    .addNode('searchKgContext', withNodeTiming('searchKgContext', searchKgContextNode))
+    .addNode('resolveEntities', withNodeTiming('resolveEntities', resolveEntitiesNode))
+    .addNode('validateSectorRelevance', withNodeTiming('validateSectorRelevance', validateSectorRelevanceNode))
+    .addNode('fillFallbackStocks', withNodeTiming('fillFallbackStocks', fillFallbackStocksNode))
+    .addNode('rankStocks', withNodeTiming('rankStocks', rankStocksNode))
+    .addNode('rerankStocks', withNodeTiming('rerankStocks', rerankStocksNode))
+    .addNode('generateReport', withNodeTiming('generateReport', generateReportNode))
+    .addNode('generateObservation', withNodeTiming('generateObservation', generateModelOnlyObservationNode))
     .addEdge(START, 'extractNewsHints')
     .addEdge('extractNewsHints', 'webSearchContext')
     .addEdge('webSearchContext', 'extractGroundedHints')
@@ -406,37 +594,81 @@ export async function runResearchWorkflow(input: {
     tickers?: string[];
     securityHints?: Array<{name: string; code: string; exchange?: string}>;
     tags?: string[];
+    onTraceStep?: (step: ResearchTraceStep) => void;
 }) {
-    return researchWorkflowGraph.invoke({
-        requestId: input.requestId,
-        mode: input.mode,
-        rawText: input.rawText,
-        tickers: [...(input.tickers ?? [])],
-        securityHints: [...(input.securityHints ?? [])],
-        tags: [...(input.tags ?? [])],
-        searchKeywords: [],
-        searchContextTags: [],
-        kgCoverageMiss: false,
-        analysisAngle: '',
-        webSearchQuery: '',
-        webSearchEvidence: [],
-        matchedEntities: createEmptyMatchedEntities(),
-        reasoningPaths: [],
-        candidateStocks: [],
-        directHitStats: {
-            industries: 0,
-            companies: 0,
-        },
-        directHitEntityIds: {
-            industries: [],
-            companies: [],
-        },
-        report: null,
-        observation: null,
-        resultMeta: {
-            confidence: 'low',
-            sourceType: 'kg',
-            validationStatus: 'kg_verified',
-        },
+    const start = Date.now();
+    console.info(`[research-workflow] requestId=${input.requestId} phase=start mode=${input.mode}`);
+    traceCollectors.set(input.requestId, {
+        startedAt: start,
+        steps: [],
     });
+    if (input.onTraceStep) {
+        traceStepListeners.set(input.requestId, input.onTraceStep);
+    }
+    try {
+        const result = await researchWorkflowGraph.invoke({
+            requestId: input.requestId,
+            mode: input.mode,
+            rawText: input.rawText,
+            tickers: [...(input.tickers ?? [])],
+            securityHints: [...(input.securityHints ?? [])],
+            tags: [...(input.tags ?? [])],
+            searchKeywords: [],
+            searchContextTags: [],
+            kgCoverageMiss: false,
+            analysisAngle: '',
+            webSearchQuery: '',
+            webSearchEvidence: [],
+            matchedEntities: createEmptyMatchedEntities(),
+            reasoningPaths: [],
+            candidateStocks: [],
+            directHitStats: {
+                industries: 0,
+                companies: 0,
+            },
+            directHitEntityIds: {
+                industries: [],
+                companies: [],
+            },
+            report: null,
+            observation: null,
+            resultMeta: {
+                confidence: 'low',
+                sourceType: 'kg',
+                validationStatus: 'kg_verified',
+            },
+        });
+        const finishedAt = Date.now();
+        const collector = traceCollectors.get(input.requestId);
+        const trace: ResearchTrace = {
+            version: 'v1',
+            requestId: input.requestId,
+            mode: input.mode,
+            startedAt: new Date(collector?.startedAt ?? start).toISOString(),
+            finishedAt: new Date(finishedAt).toISOString(),
+            elapsedMs: finishedAt - (collector?.startedAt ?? start),
+            steps: collector?.steps ?? [],
+        };
+
+        console.info(
+            `[research-workflow] requestId=${input.requestId} phase=done elapsedMs=${
+                Date.now() - start
+            } evidenceCount=${result.webSearchEvidence.length} reasoningCount=${result.reasoningPaths.length} candidateCount=${
+                result.candidateStocks.length
+            }`
+        );
+        return {
+            ...result,
+            trace,
+        };
+    } catch (error) {
+        console.error(
+            `[research-workflow] requestId=${input.requestId} phase=error elapsedMs=${Date.now() - start}`,
+            error
+        );
+        throw error;
+    } finally {
+        traceCollectors.delete(input.requestId);
+        traceStepListeners.delete(input.requestId);
+    }
 }

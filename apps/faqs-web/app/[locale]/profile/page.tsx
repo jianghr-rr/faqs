@@ -74,14 +74,13 @@ export default async function ProfilePage() {
         );
     }
 
-    const displayName =
-        user.user_metadata?.name ?? user.user_metadata?.full_name ?? user.email?.split('@')[0];
+    const displayName = user.name ?? user.email.split('@')[0];
 
     return (
         <div className="mx-auto max-w-lg px-4 py-6">
             <div className="mb-6 flex items-center gap-3 rounded-lg border border-border bg-bg-card p-4">
-                {user.user_metadata?.avatar_url ? (
-                    <img src={user.user_metadata.avatar_url} alt="" className="h-12 w-12 rounded-full" />
+                {user.avatar ? (
+                    <img src={user.avatar} alt="" className="h-12 w-12 rounded-full" />
                 ) : (
                     <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-lg font-semibold text-white">
                         {(displayName?.[0] ?? 'U').toUpperCase()}

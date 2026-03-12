@@ -1,0 +1,30 @@
+[
+    {
+        "id": "d980c317-abb8-4074-8b11-615fba321726",
+        "email": "admin1@finagents.app",
+        "name": "管理员 1",
+        "passwordHash": "43a28bcb6b515974b8647ee10b7ae0f5:d3894af049f8e649a5640895b78b342cb1ae08fbece15c6cede3a5ce83f69666755ab6273d7f04b56ec4856cccd97662aa4cc9cb3fd051ce09c9f83d53e19228",
+        "role": "admin"
+    },
+    {
+        "id": "f4808b3d-a8e3-43f9-9cc2-170ce3cd27f1",
+        "email": "admin2@finagents.app",
+        "name": "管理员 2",
+        "passwordHash": "e513398f61b81692c595688645898050:3be736a3482e9a5ad1851b4dbe3d9ff378cb41ff45af268c3d95ab9876d4b92db7b9c55bb36d397197867d5b2e95fdfff83d3fa23124fe728fa6d6b26b396a6f",
+        "role": "admin"
+    },
+    {
+        "id": "2e356446-965c-443a-adbd-e15bff22493c",
+        "email": "admin3@finagents.app",
+        "name": "管理员 3",
+        "passwordHash": "ad9421309805bf25f3acf563bad4d916:efc13126ab2342f93935ba47a907744e14209bdb79e76bb5601e6b885ca03822cfebdf3e4297ffed01d953a80183e661181fa1f2369a9ce3e4bba7d776fe2f77",
+        "role": "admin"
+    },
+    {
+        "id": "a603c9b1-418b-40e8-9ade-8c7da3abe13",
+        "email": "admin4@finagents.app",
+        "name": "管理员 4",
+        "passwordHash": "6a052f21d117da11f74bf0ee3638a6be:9236ee187d9ab2cd4a81214f7e9a2e0f6d129ccf8eb408ce5e7691feedbfc2f42bfacd214ee38e214d0b1ed6e30723e0c7a95b84e25e8a6598e5ad810b2d8d6d",
+        "role": "admin"
+    }
+]
