@@ -2,7 +2,7 @@
 
 import {redirect} from 'next/navigation';
 import {headers} from 'next/headers';
-import {createClient} from '~/lib/supabase/server';
+import {createClient, getCurrentUser} from '~/lib/supabase/server';
 
 const EXTERNAL_TIMEOUT_MESSAGE = '链接外网容易超时，请重试';
 
@@ -145,11 +145,7 @@ export async function signOut() {
 }
 
 export async function getCurrentProfile() {
-    const supabase = await createClient();
-
-    const {
-        data: {user},
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) return null;
 

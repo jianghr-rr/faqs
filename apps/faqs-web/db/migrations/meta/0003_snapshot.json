@@ -1,0 +1,1432 @@
+{
+    "id": "88d07ef4-2210-4566-851e-4a3e18f5e022",
+    "prevId": "29f200c3-580f-46ea-b344-c97880e931d5",
+    "version": "7",
+    "dialect": "postgresql",
+    "tables": {
+        "public.categories": {
+            "name": "categories",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "serial",
+                    "primaryKey": true,
+                    "notNull": true
+                },
+                "name": {
+                    "name": "name",
+                    "type": "varchar(100)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "slug": {
+                    "name": "slug",
+                    "type": "varchar(100)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "description": {
+                    "name": "description",
+                    "type": "varchar(500)",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "parent_id": {
+                    "name": "parent_id",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "sort_order": {
+                    "name": "sort_order",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 0
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "categories_parent_id_idx": {
+                    "name": "categories_parent_id_idx",
+                    "columns": [
+                        {
+                            "expression": "parent_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "categories_slug_unique": {
+                    "name": "categories_slug_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["slug"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.event_entity_map": {
+            "name": "event_entity_map",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "event_id": {
+                    "name": "event_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "entity_id": {
+                    "name": "entity_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "impact_type": {
+                    "name": "impact_type",
+                    "type": "varchar(50)",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "impact_score": {
+                    "name": "impact_score",
+                    "type": "numeric(5, 4)",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "event_entity_map_event_idx": {
+                    "name": "event_entity_map_event_idx",
+                    "columns": [
+                        {
+                            "expression": "event_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "event_entity_map_entity_idx": {
+                    "name": "event_entity_map_entity_idx",
+                    "columns": [
+                        {
+                            "expression": "entity_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "event_entity_map_event_id_events_id_fk": {
+                    "name": "event_entity_map_event_id_events_id_fk",
+                    "tableFrom": "event_entity_map",
+                    "tableTo": "events",
+                    "columnsFrom": ["event_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                },
+                "event_entity_map_entity_id_kg_entities_id_fk": {
+                    "name": "event_entity_map_entity_id_kg_entities_id_fk",
+                    "tableFrom": "event_entity_map",
+                    "tableTo": "kg_entities",
+                    "columnsFrom": ["entity_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "event_entity_map_event_entity_unique": {
+                    "name": "event_entity_map_event_entity_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["event_id", "entity_id"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.events": {
+            "name": "events",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "title": {
+                    "name": "title",
+                    "type": "varchar(300)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "event_type": {
+                    "name": "event_type",
+                    "type": "varchar(100)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "summary": {
+                    "name": "summary",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "source_news_id": {
+                    "name": "source_news_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "event_time": {
+                    "name": "event_time",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "events_event_type_idx": {
+                    "name": "events_event_type_idx",
+                    "columns": [
+                        {
+                            "expression": "event_type",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "events_source_news_id_idx": {
+                    "name": "events_source_news_id_idx",
+                    "columns": [
+                        {
+                            "expression": "source_news_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "events_source_news_id_news_id_fk": {
+                    "name": "events_source_news_id_news_id_fk",
+                    "tableFrom": "events",
+                    "tableTo": "news",
+                    "columnsFrom": ["source_news_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "set null",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.faq_tags": {
+            "name": "faq_tags",
+            "schema": "",
+            "columns": {
+                "faq_id": {
+                    "name": "faq_id",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "tag_id": {
+                    "name": "tag_id",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true
+                }
+            },
+            "indexes": {
+                "faq_tags_tag_id_idx": {
+                    "name": "faq_tags_tag_id_idx",
+                    "columns": [
+                        {
+                            "expression": "tag_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {},
+            "compositePrimaryKeys": {
+                "faq_tags_faq_id_tag_id_pk": {
+                    "name": "faq_tags_faq_id_tag_id_pk",
+                    "columns": ["faq_id", "tag_id"]
+                }
+            },
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.faqs": {
+            "name": "faqs",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "serial",
+                    "primaryKey": true,
+                    "notNull": true
+                },
+                "question": {
+                    "name": "question",
+                    "type": "varchar(500)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "answer": {
+                    "name": "answer",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "category_id": {
+                    "name": "category_id",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "author_id": {
+                    "name": "author_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "status": {
+                    "name": "status",
+                    "type": "faq_status",
+                    "typeSchema": "public",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'draft'"
+                },
+                "is_featured": {
+                    "name": "is_featured",
+                    "type": "boolean",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": false
+                },
+                "view_count": {
+                    "name": "view_count",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 0
+                },
+                "sort_order": {
+                    "name": "sort_order",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 0
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "faqs_category_id_idx": {
+                    "name": "faqs_category_id_idx",
+                    "columns": [
+                        {
+                            "expression": "category_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "faqs_author_id_idx": {
+                    "name": "faqs_author_id_idx",
+                    "columns": [
+                        {
+                            "expression": "author_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "faqs_status_idx": {
+                    "name": "faqs_status_idx",
+                    "columns": [
+                        {
+                            "expression": "status",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "faqs_status_sort_idx": {
+                    "name": "faqs_status_sort_idx",
+                    "columns": [
+                        {
+                            "expression": "status",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        },
+                        {
+                            "expression": "sort_order",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.kg_entities": {
+            "name": "kg_entities",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "entity_type": {
+                    "name": "entity_type",
+                    "type": "kg_entity_type",
+                    "typeSchema": "public",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "name": {
+                    "name": "name",
+                    "type": "varchar(200)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "canonical_name": {
+                    "name": "canonical_name",
+                    "type": "varchar(200)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "description": {
+                    "name": "description",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "status": {
+                    "name": "status",
+                    "type": "kg_entity_status",
+                    "typeSchema": "public",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'active'"
+                },
+                "metadata": {
+                    "name": "metadata",
+                    "type": "jsonb",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'{}'::jsonb"
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "kg_entities_type_idx": {
+                    "name": "kg_entities_type_idx",
+                    "columns": [
+                        {
+                            "expression": "entity_type",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "kg_entities_name_idx": {
+                    "name": "kg_entities_name_idx",
+                    "columns": [
+                        {
+                            "expression": "name",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "kg_entities_type_canonical_name_unique": {
+                    "name": "kg_entities_type_canonical_name_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["entity_type", "canonical_name"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.kg_entity_aliases": {
+            "name": "kg_entity_aliases",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "entity_id": {
+                    "name": "entity_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "alias": {
+                    "name": "alias",
+                    "type": "varchar(200)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "alias_type": {
+                    "name": "alias_type",
+                    "type": "kg_alias_type",
+                    "typeSchema": "public",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'common'"
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "kg_entity_aliases_alias_idx": {
+                    "name": "kg_entity_aliases_alias_idx",
+                    "columns": [
+                        {
+                            "expression": "alias",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "kg_entity_aliases_entity_id_kg_entities_id_fk": {
+                    "name": "kg_entity_aliases_entity_id_kg_entities_id_fk",
+                    "tableFrom": "kg_entity_aliases",
+                    "tableTo": "kg_entities",
+                    "columnsFrom": ["entity_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "kg_entity_aliases_entity_alias_unique": {
+                    "name": "kg_entity_aliases_entity_alias_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["entity_id", "alias"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.kg_relations": {
+            "name": "kg_relations",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "from_entity_id": {
+                    "name": "from_entity_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "to_entity_id": {
+                    "name": "to_entity_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "relation_type": {
+                    "name": "relation_type",
+                    "type": "kg_relation_type",
+                    "typeSchema": "public",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "weight": {
+                    "name": "weight",
+                    "type": "numeric(8, 4)",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "confidence": {
+                    "name": "confidence",
+                    "type": "numeric(5, 4)",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "source": {
+                    "name": "source",
+                    "type": "varchar(200)",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "evidence": {
+                    "name": "evidence",
+                    "type": "jsonb",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'{}'::jsonb"
+                },
+                "valid_from": {
+                    "name": "valid_from",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "valid_to": {
+                    "name": "valid_to",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "kg_relations_from_idx": {
+                    "name": "kg_relations_from_idx",
+                    "columns": [
+                        {
+                            "expression": "from_entity_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "kg_relations_to_idx": {
+                    "name": "kg_relations_to_idx",
+                    "columns": [
+                        {
+                            "expression": "to_entity_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "kg_relations_type_idx": {
+                    "name": "kg_relations_type_idx",
+                    "columns": [
+                        {
+                            "expression": "relation_type",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "kg_relations_from_entity_id_kg_entities_id_fk": {
+                    "name": "kg_relations_from_entity_id_kg_entities_id_fk",
+                    "tableFrom": "kg_relations",
+                    "tableTo": "kg_entities",
+                    "columnsFrom": ["from_entity_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                },
+                "kg_relations_to_entity_id_kg_entities_id_fk": {
+                    "name": "kg_relations_to_entity_id_kg_entities_id_fk",
+                    "tableFrom": "kg_relations",
+                    "tableTo": "kg_entities",
+                    "columnsFrom": ["to_entity_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "kg_relations_from_to_type_unique": {
+                    "name": "kg_relations_from_to_type_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["from_entity_id", "to_entity_id", "relation_type"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.news": {
+            "name": "news",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "title": {
+                    "name": "title",
+                    "type": "varchar(500)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "summary": {
+                    "name": "summary",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "content": {
+                    "name": "content",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "category": {
+                    "name": "category",
+                    "type": "news_category",
+                    "typeSchema": "public",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "source": {
+                    "name": "source",
+                    "type": "varchar(100)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "source_url": {
+                    "name": "source_url",
+                    "type": "varchar(1000)",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "published_at": {
+                    "name": "published_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "fetched_at": {
+                    "name": "fetched_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": false,
+                    "default": "now()"
+                },
+                "sentiment": {
+                    "name": "sentiment",
+                    "type": "news_sentiment",
+                    "typeSchema": "public",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "sentiment_score": {
+                    "name": "sentiment_score",
+                    "type": "numeric(3, 2)",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "tickers": {
+                    "name": "tickers",
+                    "type": "text[]",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "tags": {
+                    "name": "tags",
+                    "type": "text[]",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "image_url": {
+                    "name": "image_url",
+                    "type": "varchar(1000)",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "importance": {
+                    "name": "importance",
+                    "type": "smallint",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 2
+                },
+                "is_ai_generated": {
+                    "name": "is_ai_generated",
+                    "type": "boolean",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": false
+                },
+                "agent_id": {
+                    "name": "agent_id",
+                    "type": "varchar(100)",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "is_published": {
+                    "name": "is_published",
+                    "type": "boolean",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": true
+                },
+                "view_count": {
+                    "name": "view_count",
+                    "type": "integer",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": 0
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "news_published_at_idx": {
+                    "name": "news_published_at_idx",
+                    "columns": [
+                        {
+                            "expression": "published_at",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "news_category_idx": {
+                    "name": "news_category_idx",
+                    "columns": [
+                        {
+                            "expression": "category",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "news_importance_idx": {
+                    "name": "news_importance_idx",
+                    "columns": [
+                        {
+                            "expression": "importance",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "news_is_published_idx": {
+                    "name": "news_is_published_idx",
+                    "columns": [
+                        {
+                            "expression": "is_published",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "news_source_idx": {
+                    "name": "news_source_idx",
+                    "columns": [
+                        {
+                            "expression": "source",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "news_title_source_unique": {
+                    "name": "news_title_source_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["title", "source"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.profiles": {
+            "name": "profiles",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true
+                },
+                "name": {
+                    "name": "name",
+                    "type": "varchar(100)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "avatar": {
+                    "name": "avatar",
+                    "type": "varchar(500)",
+                    "primaryKey": false,
+                    "notNull": false
+                },
+                "role": {
+                    "name": "role",
+                    "type": "user_role",
+                    "typeSchema": "public",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'viewer'"
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {},
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.securities": {
+            "name": "securities",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "company_entity_id": {
+                    "name": "company_entity_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "stock_code": {
+                    "name": "stock_code",
+                    "type": "varchar(20)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "stock_name": {
+                    "name": "stock_name",
+                    "type": "varchar(100)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "exchange": {
+                    "name": "exchange",
+                    "type": "varchar(20)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "list_status": {
+                    "name": "list_status",
+                    "type": "kg_security_list_status",
+                    "typeSchema": "public",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "'listed'"
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                },
+                "updated_at": {
+                    "name": "updated_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "securities_company_entity_idx": {
+                    "name": "securities_company_entity_idx",
+                    "columns": [
+                        {
+                            "expression": "company_entity_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {
+                "securities_company_entity_id_kg_entities_id_fk": {
+                    "name": "securities_company_entity_id_kg_entities_id_fk",
+                    "tableFrom": "securities",
+                    "tableTo": "kg_entities",
+                    "columnsFrom": ["company_entity_id"],
+                    "columnsTo": ["id"],
+                    "onDelete": "cascade",
+                    "onUpdate": "no action"
+                }
+            },
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "securities_exchange_stock_code_unique": {
+                    "name": "securities_exchange_stock_code_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["exchange", "stock_code"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.tags": {
+            "name": "tags",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "serial",
+                    "primaryKey": true,
+                    "notNull": true
+                },
+                "name": {
+                    "name": "name",
+                    "type": "varchar(50)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "slug": {
+                    "name": "slug",
+                    "type": "varchar(50)",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {},
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "tags_name_unique": {
+                    "name": "tags_name_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["name"]
+                },
+                "tags_slug_unique": {
+                    "name": "tags_slug_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["slug"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        },
+        "public.user_favorites": {
+            "name": "user_favorites",
+            "schema": "",
+            "columns": {
+                "id": {
+                    "name": "id",
+                    "type": "uuid",
+                    "primaryKey": true,
+                    "notNull": true,
+                    "default": "gen_random_uuid()"
+                },
+                "user_id": {
+                    "name": "user_id",
+                    "type": "uuid",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "item_type": {
+                    "name": "item_type",
+                    "type": "favorite_item_type",
+                    "typeSchema": "public",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "item_id": {
+                    "name": "item_id",
+                    "type": "text",
+                    "primaryKey": false,
+                    "notNull": true
+                },
+                "created_at": {
+                    "name": "created_at",
+                    "type": "timestamp with time zone",
+                    "primaryKey": false,
+                    "notNull": true,
+                    "default": "now()"
+                }
+            },
+            "indexes": {
+                "user_favorites_user_id_idx": {
+                    "name": "user_favorites_user_id_idx",
+                    "columns": [
+                        {
+                            "expression": "user_id",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                },
+                "user_favorites_created_at_idx": {
+                    "name": "user_favorites_created_at_idx",
+                    "columns": [
+                        {
+                            "expression": "created_at",
+                            "isExpression": false,
+                            "asc": true,
+                            "nulls": "last"
+                        }
+                    ],
+                    "isUnique": false,
+                    "concurrently": false,
+                    "method": "btree",
+                    "with": {}
+                }
+            },
+            "foreignKeys": {},
+            "compositePrimaryKeys": {},
+            "uniqueConstraints": {
+                "user_favorites_user_item_type_id_unique": {
+                    "name": "user_favorites_user_item_type_id_unique",
+                    "nullsNotDistinct": false,
+                    "columns": ["user_id", "item_type", "item_id"]
+                }
+            },
+            "policies": {},
+            "checkConstraints": {},
+            "isRLSEnabled": false
+        }
+    },
+    "enums": {
+        "public.faq_status": {
+            "name": "faq_status",
+            "schema": "public",
+            "values": ["draft", "published", "archived"]
+        },
+        "public.favorite_item_type": {
+            "name": "favorite_item_type",
+            "schema": "public",
+            "values": ["faq", "news"]
+        },
+        "public.kg_alias_type": {
+            "name": "kg_alias_type",
+            "schema": "public",
+            "values": ["common", "short_name", "ticker_name", "english_name", "synonym"]
+        },
+        "public.kg_entity_status": {
+            "name": "kg_entity_status",
+            "schema": "public",
+            "values": ["active", "inactive"]
+        },
+        "public.kg_entity_type": {
+            "name": "kg_entity_type",
+            "schema": "public",
+            "values": ["theme", "industry", "chain_node", "company"]
+        },
+        "public.kg_relation_type": {
+            "name": "kg_relation_type",
+            "schema": "public",
+            "values": ["relates_to", "contains", "upstream_of", "belongs_to", "participates_in"]
+        },
+        "public.kg_security_list_status": {
+            "name": "kg_security_list_status",
+            "schema": "public",
+            "values": ["listed", "delisted", "suspended"]
+        },
+        "public.news_category": {
+            "name": "news_category",
+            "schema": "public",
+            "values": ["要闻", "宏观", "研报", "策略", "AI洞察", "数据"]
+        },
+        "public.news_sentiment": {
+            "name": "news_sentiment",
+            "schema": "public",
+            "values": ["positive", "negative", "neutral"]
+        },
+        "public.user_role": {
+            "name": "user_role",
+            "schema": "public",
+            "values": ["admin", "editor", "viewer"]
+        }
+    },
+    "schemas": {},
+    "sequences": {},
+    "roles": {},
+    "policies": {},
+    "views": {},
+    "_meta": {
+        "columns": {},
+        "schemas": {},
+        "tables": {}
+    }
+}

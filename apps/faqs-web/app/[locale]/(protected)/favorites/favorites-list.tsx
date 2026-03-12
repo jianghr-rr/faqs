@@ -3,16 +3,10 @@
 import {useState} from 'react';
 import Link from 'next/link';
 import {Star} from 'lucide-react';
-import {FavoriteListItem} from './favorite-list-item';
+import {FavoriteListItem, type FavoriteItem} from './favorite-list-item';
 
 interface FavoriteData {
-    items: Array<{
-        id: string;
-        itemType: string;
-        itemId: string;
-        createdAt: string;
-        item: Record<string, unknown> | null;
-    }>;
+    items: FavoriteItem[];
     total: number;
     page: number;
     totalPages: number;

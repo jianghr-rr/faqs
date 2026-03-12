@@ -38,7 +38,7 @@ if (missing.length > 0) {
     process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, serviceRoleKey, {
+const supabase = createClient(supabaseUrl!, serviceRoleKey!, {
     auth: {
         autoRefreshToken: false,
         persistSession: false,

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import {createClient} from '~/lib/supabase/server';
+import {getCurrentUser} from '~/lib/supabase/server';
 import {Plus, Edit, Trash2} from 'lucide-react';
 
 const MOCK_MY_FAQS = [
@@ -27,10 +27,7 @@ const MOCK_MY_FAQS = [
 ];
 
 export default async function MyFaqsPage() {
-    const supabase = await createClient();
-    const {
-        data: {user},
-    } = await supabase.auth.getUser();
+    await getCurrentUser();
 
     return (
         <div className="mx-auto max-w-3xl px-4 py-4 lg:py-6">

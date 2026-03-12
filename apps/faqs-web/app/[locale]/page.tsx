@@ -6,6 +6,11 @@ import {NewsTicker, NewsFeed} from './components/news';
 
 export const revalidate = 60;
 
+function toIsoString(value: Date | string | null | undefined) {
+    if (!value) return '';
+    return value instanceof Date ? value.toISOString() : value;
+}
+
 export default async function HomePage() {
     const user = await getCurrentUser();
 
@@ -30,10 +35,10 @@ export default async function HomePage() {
         ...newsData,
         items: newsData.items.map((item) => ({
             ...item,
-            publishedAt: item.publishedAt.toISOString(),
-            fetchedAt: item.fetchedAt?.toISOString() ?? null,
-            createdAt: item.createdAt.toISOString(),
-            updatedAt: item.updatedAt.toISOString(),
+            publishedAt: toIsoString(item.publishedAt),
+            fetchedAt: toIsoString(item.fetchedAt),
+            createdAt: toIsoString(item.createdAt),
+            updatedAt: toIsoString(item.updatedAt),
         })),
     };
 
@@ -57,6 +62,23 @@ export default async function HomePage() {
             )}
 
             {/* 分类 Tab + 新闻信息流 */}
+            {/* <div className="mb-4 rounded-xl border border-accent/20 bg-accent/5 p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                        <div className="text-sm font-medium text-text-primary">FinAgents AI 投研工作台</div>
+                        <div className="mt-1 text-xs leading-6 text-text-secondary">
+                            基于新闻流和行业知识图谱进行结构化分析，输出命中行业、推理路径与候选股票。
+                        </div>
+                    </div>
+                    <Link
+                        href={user ? '/analysis' : '/login?next=%2Fanalysis'}
+                        className="inline-flex h-10 items-center justify-center rounded-lg bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+                    >
+                        {user ? '打开智能分析' : '登录后使用智能分析'}
+                    </Link>
+                </div>
+            </div> */}
+
             <NewsFeed initialData={serializedNewsData} isLoggedIn={!!user} />
 
             {/* 浮动添加按钮（移动端，仅登录用户） */}

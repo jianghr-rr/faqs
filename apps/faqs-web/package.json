@@ -13,10 +13,14 @@
         "db:migrate": "drizzle-kit migrate",
         "db:push": "drizzle-kit push",
         "db:studio": "drizzle-kit studio",
-        "seed:admin-accounts": "npx tsx scripts/seed-admin-accounts.ts"
+        "seed:admin-accounts": "npx tsx scripts/seed-admin-accounts.ts",
+        "seed:kg-pilot": "npx tsx scripts/seed-kg-pilot.ts"
     },
     "dependencies": {
         "@hookform/resolvers": "5.2.2",
+        "@langchain/core": "1.1.31",
+        "@langchain/langgraph": "1.2.1",
+        "@langchain/openai": "1.2.12",
         "@react-spring/web": "9.7.5",
         "@supabase/ssr": "0.6.1",
         "@supabase/supabase-js": "2.49.4",
@@ -46,7 +50,7 @@
         "standardwebhooks": "1.0.0",
         "swr": "2.4.0",
         "tailwind-merge": "2.3.0",
-        "tencentcloud-sdk-nodejs-sms": "^4.1.171",
+        "tencentcloud-sdk-nodejs-sms": "4.1.171",
         "winston": "3.19.0",
         "winston-daily-rotate-file": "5.0.0",
         "zod": "4.0.5",

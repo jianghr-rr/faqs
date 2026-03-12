@@ -29,10 +29,21 @@ export async function createClient() {
 }
 
 export const getCurrentUser = cache(async () => {
-    const supabase = await createClient();
-    const {
-        data: {user},
-    } = await supabase.auth.getUser();
+    try {
+        const supabase = await createClient();
+        const {
+            data: {user},
+            error,
+        } = await supabase.auth.getUser();
 
-    return user;
+        if (error) {
+            console.error('[auth] getCurrentUser failed:', error);
+            return null;
+        }
+
+        return user;
+    } catch (error) {
+        console.error('[auth] getCurrentUser crashed:', error);
+        return null;
+    }
 });

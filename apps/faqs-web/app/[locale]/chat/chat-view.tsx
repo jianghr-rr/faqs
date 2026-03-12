@@ -1,25 +1,32 @@
 'use client';
 
 import {useState} from 'react';
-import {Send, Plus} from 'lucide-react';
+import {Loader2, Plus, Send} from 'lucide-react';
 
 type Message = {
     id: string;
     role: 'user' | 'assistant';
     content: string;
+    reasoningPaths?: string[][];
+    references?: {
+        entities: Array<{id: string; name: string; type: string}>;
+        stocks: Array<{stockCode: string; stockName: string}>;
+    };
 };
 
 const welcomeMessage: Message = {
     id: 'welcome',
     role: 'assistant',
-    content: '你好！我是 FinAgents 智能助手，可以帮你解读研报、分析市场数据、构建量化策略。有什么可以帮你的？',
+    content: '你好！我是 FinAgents 投研助手，可以结合新闻与行业知识图谱回答行业、产业链和股票相关问题。',
 };
 
 export function ChatView({isLoggedIn}: {isLoggedIn: boolean}) {
     const [messages, setMessages] = useState<Message[]>([welcomeMessage]);
     const [input, setInput] = useState('');
+    const [sessionId, setSessionId] = useState<string>();
+    const [loading, setLoading] = useState(false);
 
-    function handleSend() {
+    async function handleSend() {
         if (!input.trim()) return;
 
         const userMsg: Message = {
@@ -28,14 +35,47 @@ export function ChatView({isLoggedIn}: {isLoggedIn: boolean}) {
             content: input.trim(),
         };
 
-        const aiMsg: Message = {
-            id: (Date.now() + 1).toString(),
-            role: 'assistant',
-            content: '这是一个示例回复。实际的 AI 分析能力将在接入 LLM 服务后上线，届时支持研报解读、因子分析、市场观点总结等功能。',
-        };
-
-        setMessages((prev) => [...prev, userMsg, aiMsg]);
+        setMessages((prev) => [...prev, userMsg]);
         setInput('');
+
+        setLoading(true);
+        try {
+            const response = await fetch('/api/research/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    sessionId,
+                    message: userMsg.content,
+                }),
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                throw new Error(payload?.error?.message ?? '对话分析失败，请稍后重试');
+            }
+
+            setSessionId(payload.sessionId);
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: payload.messageId,
+                    role: 'assistant',
+                    content: payload.answer.text,
+                    reasoningPaths: payload.answer.reasoningPaths,
+                    references: payload.answer.references,
+                },
+            ]);
+        } catch (error) {
+            setMessages((prev) => [
+                ...prev,
+                {
+                    id: `${Date.now()}-error`,
+                    role: 'assistant',
+                    content: error instanceof Error ? error.message : '对话分析失败，请稍后重试。',
+                },
+            ]);
+        } finally {
+            setLoading(false);
+        }
     }
 
     return (
@@ -83,7 +123,46 @@ export function ChatView({isLoggedIn}: {isLoggedIn: boolean}) {
                                             : 'bg-bg-card text-text-primary'
                                     }`}
                                 >
-                                    {msg.content}
+                                    <div>{msg.content}</div>
+                                    {msg.reasoningPaths && msg.reasoningPaths.length > 0 && (
+                                        <div className="mt-3 space-y-2 rounded-xl bg-bg-base/70 p-3">
+                                            <div className="text-[11px] uppercase tracking-wide text-text-secondary">推理路径</div>
+                                            {msg.reasoningPaths.map((path, index) => (
+                                                <div key={`${path.join('-')}-${index}`} className="text-xs text-text-secondary">
+                                                    {path.join(' -> ')}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {msg.references && (
+                                        <div className="mt-3 space-y-2 rounded-xl bg-bg-base/70 p-3">
+                                            <div className="text-[11px] uppercase tracking-wide text-text-secondary">引用</div>
+                                            {msg.references.entities.length > 0 && (
+                                                <div className="flex flex-wrap gap-2">
+                                                    {msg.references.entities.map((entity) => (
+                                                        <span
+                                                            key={entity.id}
+                                                            className="rounded-md bg-bg-hover px-2 py-1 text-xs text-text-secondary"
+                                                        >
+                                                            {entity.name}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {msg.references.stocks.length > 0 && (
+                                                <div className="flex flex-wrap gap-2">
+                                                    {msg.references.stocks.map((stock) => (
+                                                        <span
+                                                            key={`${stock.stockCode}-${stock.stockName}`}
+                                                            className="rounded-md bg-accent/10 px-2 py-1 text-xs text-accent"
+                                                        >
+                                                            {stock.stockName} {stock.stockCode}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -103,10 +182,10 @@ export function ChatView({isLoggedIn}: {isLoggedIn: boolean}) {
                         />
                         <button
                             onClick={handleSend}
-                            disabled={!input.trim()}
+                            disabled={!input.trim() || loading}
                             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
                         >
-                            <Send className="h-4 w-4" />
+                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                         </button>
                     </div>
                 </div>

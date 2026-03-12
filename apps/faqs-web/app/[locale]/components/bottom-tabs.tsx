@@ -47,9 +47,9 @@ export function BottomTabs({user, className = ''}: {user: SupabaseUser | null; c
 
     return (
         <nav
-            className={`fixed inset-x-0 bottom-0 z-50 border-t border-border bg-bg-card pb-[env(safe-area-inset-bottom)] ${className}`}
+            className={`fixed inset-x-0 bottom-0 z-50 border-t border-border bg-bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur ${className}`}
         >
-            <div className="flex h-14">
+            <div className="flex h-14 w-full">
                 {tabs.map((tab) => {
                     const active = isActive(pathname, tab.href);
                     const needsAuth = tab.key === 'analysis' && !user;

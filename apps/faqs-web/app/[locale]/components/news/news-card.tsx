@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import {ExternalLink, Clock, TrendingUp, TrendingDown, Minus} from 'lucide-react';
 import {FavoriteButton} from '../favorite-button';
 
@@ -78,8 +79,13 @@ export function NewsCard({
 }: NewsCardProps) {
     const sentimentInfo = sentiment ? sentimentConfig[sentiment as keyof typeof sentimentConfig] : null;
     const SentimentIcon = sentimentInfo?.icon;
+    const analysisHref = id
+        ? isLoggedIn
+            ? `/analysis?mode=news&newsId=${id}`
+            : `/login?next=${encodeURIComponent(`/analysis?mode=news&newsId=${id}`)}`
+        : null;
 
-    const card = (
+    return (
         <div
             className={`group rounded-lg border bg-bg-card p-4 transition-all hover:border-border-hover active:scale-[0.995] ${
                 importance === 1 ? 'border-accent/30' : 'border-border'
@@ -96,21 +102,23 @@ export function NewsCard({
                 </h3>
                 <div className="flex shrink-0 items-center gap-1">
                     {isLoggedIn && id && (
-                        <div
-                            onClick={(e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation(); }}
-                            onKeyDown={(e: React.KeyboardEvent) => e.stopPropagation()}
-                            role="presentation"
-                        >
-                            <FavoriteButton
-                                itemType="news"
-                                itemId={id}
-                                initialFavorited={initialFavorited}
-                                variant="icon"
-                            />
-                        </div>
+                        <FavoriteButton
+                            itemType="news"
+                            itemId={id}
+                            initialFavorited={initialFavorited}
+                            variant="icon"
+                        />
                     )}
                     {sourceUrl && (
-                        <ExternalLink className="mt-0.5 h-3.5 w-3.5 text-text-disabled opacity-0 transition-opacity group-hover:opacity-100" />
+                        <a
+                            href={sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="rounded p-1 text-text-disabled transition-colors hover:bg-bg-hover hover:text-text-primary"
+                            title="打开原始新闻"
+                        >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
                     )}
                 </div>
             </div>
@@ -171,16 +179,17 @@ export function NewsCard({
                     </>
                 )}
             </div>
+
+            {analysisHref && (
+                <div className="mt-3">
+                    <Link
+                        href={analysisHref}
+                        className="inline-flex items-center rounded-md bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/20"
+                    >
+                        智能分析这条新闻
+                    </Link>
+                </div>
+            )}
         </div>
     );
-
-    if (sourceUrl) {
-        return (
-            <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="block">
-                {card}
-            </a>
-        );
-    }
-
-    return card;
 }

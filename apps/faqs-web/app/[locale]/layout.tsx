@@ -49,12 +49,12 @@ export default async function RootLayout({
                 className={`${inter.variable} ${lexend.variable} ${jetbrainsMono.variable} bg-bg-base font-inter text-text-primary antialiased`}
             >
                 <Providers>
-                    <TopNavbar user={user} className="hidden lg:flex" />
-                    <MobileHeader className="flex lg:hidden" />
+                    <TopNavbar user={user} className="hidden lg:block" />
+                    <MobileHeader className="block lg:hidden" />
 
-                    <main className="pb-14 lg:pb-0">{children}</main>
+                    <main className="pb-[calc(3.5rem+env(safe-area-inset-bottom))] lg:pb-0">{children}</main>
 
-                    <BottomTabs user={user} className="flex lg:hidden" />
+                    <BottomTabs user={user} className="block lg:hidden" />
                 </Providers>
             </body>
         </html>

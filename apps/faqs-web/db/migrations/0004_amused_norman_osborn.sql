@@ -1,0 +1,1 @@
+ALTER TABLE "news" ADD COLUMN "related_securities" jsonb DEFAULT '[]'::jsonb NOT NULL;--> statement-breakpoint
