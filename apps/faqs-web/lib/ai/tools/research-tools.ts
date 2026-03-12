@@ -2,6 +2,7 @@ import {tool} from '@langchain/core/tools';
 import {z} from 'zod';
 import {searchWebNewsContext} from '~/lib/ai/models/client';
 import {analyzeKgText, searchKgEntities} from '~/lib/kg/service';
+import type {KgAnalysisResult} from '~/lib/kg/types';
 import {rankCandidateStocks} from '~/lib/research/ranker';
 
 const candidateStockSchema = z.object({
@@ -36,8 +37,34 @@ export const webSearchNewsContextToolSchema = z.object({
     angle: z.string().optional(),
 });
 
+function createEmptyKgAnalysisResult(): KgAnalysisResult {
+    return {
+        matchedEntities: {
+            themes: [],
+            industries: [],
+            chainNodes: [],
+            companies: [],
+        },
+        reasoningPaths: [],
+        candidateStocks: [],
+        directHitStats: {
+            industries: 0,
+            companies: 0,
+        },
+        directHitEntityIds: {
+            industries: [],
+            companies: [],
+        },
+    };
+}
+
 export async function resolveEntitiesTool(input: {text: string; tickers?: string[]; tags?: string[]}) {
-    return analyzeKgText(input);
+    try {
+        return await analyzeKgText(input);
+    } catch (error) {
+        console.error('[research] resolve entities failed, fallback to empty KG result:', error);
+        return createEmptyKgAnalysisResult();
+    }
 }
 
 export async function rankStocksTool(input: {
