@@ -297,9 +297,16 @@ async function extractNewsHintsNode(state: ResearchWorkflowState) {
         };
     }
 
+    const llmStart = Date.now();
+    console.info(`[research-workflow] requestId=${state.requestId} node=extractNewsHints substep=extractNewsSearchHints phase=start`);
     const result = await extractNewsSearchHints({
         rawText: state.rawText,
     });
+    console.info(
+        `[research-workflow] requestId=${state.requestId} node=extractNewsHints substep=extractNewsSearchHints phase=done elapsedMs=${
+            Date.now() - llmStart
+        } keywordCount=${result.keywords.length} tagCount=${result.tags.length}`
+    );
 
     return {
         searchKeywords: [...new Set([...result.keywords, ...result.tags])].slice(0, 12),
@@ -439,24 +446,45 @@ async function fillFallbackStocksNode(state: ResearchWorkflowState) {
         return {};
     }
 
+    const extractStart = Date.now();
+    console.info(
+        `[research-workflow] requestId=${state.requestId} node=fillFallbackStocks substep=extractMentionedCompanies phase=start`
+    );
     const extracted = await extractMentionedCompanies({
         rawText: state.rawText,
         searchKeywords: state.searchKeywords,
         webSearchEvidence: state.webSearchEvidence,
     });
+    console.info(
+        `[research-workflow] requestId=${state.requestId} node=fillFallbackStocks substep=extractMentionedCompanies phase=done elapsedMs=${
+            Date.now() - extractStart
+        } mentionCount=${extracted.companies.length}`
+    );
     if (extracted.companies.length === 0) {
         return {};
     }
 
+    const resolveStart = Date.now();
+    console.info(
+        `[research-workflow] requestId=${state.requestId} node=fillFallbackStocks substep=resolveFallbackStocksFromMentions phase=start mentionCount=${
+            extracted.companies.length
+        } tickerHintCount=${state.tickers.length} securityHintCount=${state.securityHints.length}`
+    );
     const fallbackStocks = await resolveFallbackStocksFromMentions({
         mentions: extracted.companies,
         tickers: state.tickers,
         securityHints: state.securityHints,
     });
+    console.info(
+        `[research-workflow] requestId=${state.requestId} node=fillFallbackStocks substep=resolveFallbackStocksFromMentions phase=done elapsedMs=${
+            Date.now() - resolveStart
+        } fallbackCount=${fallbackStocks.length}`
+    );
     if (fallbackStocks.length === 0) {
         return {};
     }
 
+    const mergeStart = Date.now();
     const mergedStocks = [...new Map(
         [...state.candidateStocks, ...fallbackStocks]
             .sort((a, b) => b.score - a.score)
@@ -464,6 +492,11 @@ async function fillFallbackStocksNode(state: ResearchWorkflowState) {
     ).values()]
         .sort((a, b) => b.score - a.score)
         .slice(0, 8);
+    console.info(
+        `[research-workflow] requestId=${state.requestId} node=fillFallbackStocks substep=mergeCandidates phase=done elapsedMs=${
+            Date.now() - mergeStart
+        } mergedCount=${mergedStocks.length}`
+    );
 
     return {
         candidateStocks: mergedStocks,

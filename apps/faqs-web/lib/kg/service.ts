@@ -103,10 +103,15 @@ function buildSyntheticCompanyId(stockCode: string, companyName: string) {
 async function getKgCatalogSnapshot() {
     const now = Date.now();
     if (kgCatalogCache && kgCatalogCache.expiresAt > now) {
+        console.info(
+            `[kg-prof] op=getKgCatalogSnapshot phase=cache_hit entities=${kgCatalogCache.value.entities.length} aliases=${kgCatalogCache.value.aliases.length} securities=${kgCatalogCache.value.allSecurities.length}`
+        );
         return kgCatalogCache.value;
     }
 
     if (!kgCatalogInFlight) {
+        const start = Date.now();
+        console.info('[kg-prof] op=getKgCatalogSnapshot phase=cache_miss_start');
         kgCatalogInFlight = (async () => {
             const [{entities, aliases}, allSecurities] = await Promise.all([listEntitiesWithAliases(), listSecurities()]);
             const snapshot: KgCatalogSnapshot = {entities, aliases, allSecurities};
@@ -114,6 +119,11 @@ async function getKgCatalogSnapshot() {
                 value: snapshot,
                 expiresAt: Date.now() + KG_CATALOG_CACHE_TTL_MS,
             };
+            console.info(
+                `[kg-prof] op=getKgCatalogSnapshot phase=cache_miss_done elapsedMs=${Date.now() - start} entities=${
+                    entities.length
+                } aliases=${aliases.length} securities=${allSecurities.length}`
+            );
             return snapshot;
         })().finally(() => {
             kgCatalogInFlight = undefined;
@@ -188,6 +198,7 @@ export async function resolveFallbackStocksFromMentions(input: {
     tickers?: string[];
     securityHints?: Array<{name: string; code: string; exchange?: string}>;
 }) {
+    const start = Date.now();
     const normalizedMentions = [...new Map(
         input.mentions
             .map((mention) => ({
@@ -209,8 +220,16 @@ export async function resolveFallbackStocksFromMentions(input: {
             .filter((item) => item.name && item.code)
             .map((item) => [`${normalizeToken(item.name)}:${item.code}`, item] as const)
     ).values()];
+    console.info(
+        `[kg-prof] op=resolveFallbackStocksFromMentions phase=start mentionCount=${normalizedMentions.length} tickerHintCount=${tickerHints.length} securityHintCount=${securityHints.length}`
+    );
 
     if (normalizedMentions.length === 0 && tickerHints.length === 0 && securityHints.length === 0) {
+        console.info(
+            `[kg-prof] op=resolveFallbackStocksFromMentions phase=done elapsedMs=${
+                Date.now() - start
+            } candidateCount=0 reason=empty_input`
+        );
         return [];
     }
 
@@ -332,7 +351,13 @@ export async function resolveFallbackStocksFromMentions(input: {
         }
     });
 
-    return [...candidates.values()].sort((a, b) => b.score - a.score).slice(0, 8);
+    const resolved = [...candidates.values()].sort((a, b) => b.score - a.score).slice(0, 8);
+    console.info(
+        `[kg-prof] op=resolveFallbackStocksFromMentions phase=done elapsedMs=${Date.now() - start} candidateCount=${
+            resolved.length
+        }`
+    );
+    return resolved;
 }
 
 export async function analyzeKgText(input: AnalyzeInput): Promise<KgAnalysisResult> {

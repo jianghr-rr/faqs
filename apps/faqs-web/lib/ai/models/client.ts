@@ -72,6 +72,24 @@ function createChatModel(temperature = 0.2) {
     });
 }
 
+function getOpenAiProviderMeta() {
+    const env = getEnv();
+    const host = (() => {
+        if (!env.OPENAI_BASE_URL) {
+            return 'api.openai.com';
+        }
+        try {
+            return new URL(env.OPENAI_BASE_URL).host;
+        } catch {
+            return 'invalid_base_url';
+        }
+    })();
+    return {
+        model: env.OPENAI_MODEL,
+        providerHost: host,
+    };
+}
+
 function clampScore(score: number) {
     return Math.max(0, Math.min(1, Number(score.toFixed(2))));
 }
@@ -178,6 +196,11 @@ export async function extractNewsSearchHints(input: {rawText: string}) {
     if (!trimmed) {
         return {keywords: [] as string[], tags: [] as string[], angle: ''};
     }
+    const start = Date.now();
+    const providerMeta = getOpenAiProviderMeta();
+    console.info(
+        `[ai-prof] op=extractNewsSearchHints phase=start rawTextChars=${trimmed.length} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`
+    );
 
     try {
         const model = createChatModel(0);
@@ -187,6 +210,11 @@ export async function extractNewsSearchHints(input: {rawText: string}) {
 
         const chain = buildNewsSearchHintsPrompt().pipe(model.withStructuredOutput(newsSearchHintsSchema));
         const result = await chain.invoke({rawText: trimmed});
+        console.info(
+            `[ai-prof] op=extractNewsSearchHints phase=done elapsedMs=${Date.now() - start} keywordCount=${
+                result.keywords?.length ?? 0
+            } tagCount=${result.tags?.length ?? 0} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`
+        );
 
         return {
             keywords: [...new Set((result.keywords ?? []).map((item) => item.trim()).filter(Boolean))].slice(0, 8),
@@ -194,6 +222,10 @@ export async function extractNewsSearchHints(input: {rawText: string}) {
             angle: (result.angle ?? '').trim(),
         };
     } catch (error) {
+        console.error(
+            `[ai-prof] op=extractNewsSearchHints phase=error elapsedMs=${Date.now() - start} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`,
+            error
+        );
         console.error('[ai] extract news search hints failed:', error);
         return {keywords: [] as string[], tags: [] as string[], angle: ''};
     }
@@ -354,9 +386,16 @@ export async function searchWebNewsContext(input: {rawText: string; keywords: st
     const cache = getTavilyCache(env.TAVILY_CACHE_TTL_SECONDS);
     const cached = cache.get<TavilySearchResult>(cacheKey);
     if (cached) {
+        console.info(
+            `[ai-prof] op=searchWebNewsContext phase=cache_hit keywordCount=${input.keywords.length} maxResults=${env.TAVILY_MAX_RESULTS}`
+        );
         return cached;
     }
 
+    const start = Date.now();
+    console.info(
+        `[ai-prof] op=searchWebNewsContext phase=start keywordCount=${input.keywords.length} maxResults=${env.TAVILY_MAX_RESULTS} timeoutMs=${env.TAVILY_TIMEOUT_MS}`
+    );
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
         const controller = new AbortController();
@@ -428,12 +467,23 @@ export async function searchWebNewsContext(input: {rawText: string; keywords: st
         } satisfies TavilySearchResult;
 
         cache.set(cacheKey, result, env.TAVILY_CACHE_TTL_SECONDS);
+        console.info(
+            `[ai-prof] op=searchWebNewsContext phase=done elapsedMs=${Date.now() - start} resultCount=${
+                result.results.length
+            }`
+        );
         return result;
     } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') {
+            console.warn(
+                `[ai-prof] op=searchWebNewsContext phase=timeout elapsedMs=${Date.now() - start} timeoutMs=${
+                    env.TAVILY_TIMEOUT_MS
+                }`
+            );
             console.warn(`[ai] tavily web search timeout after ${env.TAVILY_TIMEOUT_MS}ms`);
             return {query, results: []} satisfies TavilySearchResult;
         }
+        console.error(`[ai-prof] op=searchWebNewsContext phase=error elapsedMs=${Date.now() - start}`, error);
         console.error('[ai] tavily web search failed:', error);
         return {query, results: []} satisfies TavilySearchResult;
     } finally {
@@ -542,6 +592,13 @@ export async function extractMentionedCompanies(input: {
     if (!trimmed) {
         return {companies: [], themes: []};
     }
+    const start = Date.now();
+    const providerMeta = getOpenAiProviderMeta();
+    console.info(
+        `[ai-prof] op=extractMentionedCompanies phase=start rawTextChars=${trimmed.length} keywordCount=${
+            input.searchKeywords.length
+        } evidenceCount=${input.webSearchEvidence.length} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`
+    );
 
     try {
         const model = createChatModel(0);
@@ -559,6 +616,11 @@ export async function extractMentionedCompanies(input: {
                 webSearchEvidence: input.webSearchEvidence,
             })
         );
+        console.info(
+            `[ai-prof] op=extractMentionedCompanies phase=done elapsedMs=${Date.now() - start} mentionCount=${
+                result.companies?.length ?? 0
+            } themeCount=${result.themes?.length ?? 0} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`
+        );
 
         return {
             companies: (result.companies ?? [])
@@ -571,6 +633,10 @@ export async function extractMentionedCompanies(input: {
             themes: [...new Set((result.themes ?? []).map((item) => item.trim()).filter(Boolean))].slice(0, 8),
         };
     } catch (error) {
+        console.error(
+            `[ai-prof] op=extractMentionedCompanies phase=error elapsedMs=${Date.now() - start} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`,
+            error
+        );
         console.error('[ai] extract mentioned companies failed:', error);
         return {companies: [], themes: []};
     }
