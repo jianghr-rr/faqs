@@ -21,6 +21,16 @@ const envSchema = z.object({
     OPENAI_API_KEY: z.string().optional(),
     OPENAI_BASE_URL: z.string().url().optional(),
     OPENAI_MODEL: z.string().optional().default('gpt-4o-mini'),
+    RESEARCH_REPORT_PROMPT_VERSION: z.enum(['v1', 'v2']).optional().default('v2'),
+    RESEARCH_REPORT_AB_COMPARE_ENABLED: z
+        .enum(['true', 'false'])
+        .optional()
+        .default('false')
+        .transform((v) => v === 'true'),
+    OPENAI_HINTS_TIMEOUT_MS: z.coerce.number().positive().optional().default(8000),
+    OPENAI_MENTION_TIMEOUT_MS: z.coerce.number().positive().optional().default(8000),
+    OPENAI_REPORT_TIMEOUT_MS: z.coerce.number().positive().optional().default(10000),
+    OPENAI_REPORT_SELF_CHECK_TIMEOUT_MS: z.coerce.number().positive().optional().default(5000),
     TAVILY_API_KEY: z.string().optional(),
     TAVILY_ALLOWED_DOMAINS: z.string().optional(),
     TAVILY_CACHE_TTL_SECONDS: z.coerce.number().positive().optional().default(1800),

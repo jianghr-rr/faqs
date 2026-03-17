@@ -41,12 +41,55 @@ type AnalysisResult = {
         summary: string;
         reasoning: string[];
         risks: string[];
+        professionalAnalysis?: {
+            coreEvent: string;
+            newsType: '政策' | '行业' | '公司' | '宏观' | '事件驱动' | '其他';
+            signalCategory: '情绪噪音' | '短期事件' | '中期逻辑' | '长期趋势';
+            eventWindow: string;
+            impactMechanism: string[];
+            impactTerm: '短期' | '中期' | '长期' | '混合';
+            industryImpacts: Array<{
+                industry: string;
+                sentiment: '利好' | '利空' | '中性';
+                path: string;
+            }>;
+            chainAnalysis: {
+                upstream: string[];
+                midstream: string[];
+                downstream: string[];
+                mostBenefitedLink: string;
+                reason: string;
+            };
+            aShareMapping: Array<{
+                stockCode: string;
+                stockName: string;
+                companyName: string;
+                logic: string;
+                elasticity: '高' | '中' | '低';
+                leaderPotential: '高' | '中' | '低';
+            }>;
+            tradingView: {
+                opportunityType: '情绪题材' | '趋势机会' | '基本面机会' | '观察';
+                sustainability: '强' | '中' | '弱';
+                tradability: '强' | '中' | '弱';
+                strategy: string[];
+                worthTracking: boolean;
+                tradeValueSummary: string;
+            };
+            falsificationPoints: string[];
+            noTradeReason: string;
+        };
     } | null;
     observation?: {
         observationType: 'macro_market' | 'sector_theme' | 'industry_chain' | 'event_driver';
         summary: string;
         directions: string[];
         risks: string[];
+        marketSignal?: string;
+        possibleDrivers?: string[];
+        mappedSectors?: string[];
+        aShareImpact?: string;
+        tradeValue?: 'weak' | 'medium' | 'strong';
     } | null;
     resultMeta?: {
         confidence: 'high' | 'medium' | 'low';
@@ -80,7 +123,7 @@ type AnalysisResult = {
         steps: Array<{
             name: string;
             label: string;
-            status: 'done' | 'skipped' | 'failed';
+            status: 'running' | 'done' | 'skipped' | 'failed';
             elapsedMs: number;
             summary: string;
         }>;
@@ -117,6 +160,19 @@ function getObservationTypeLabel(type: 'macro_market' | 'sector_theme' | 'indust
     }
 }
 
+function getTradeValueLabel(value: 'weak' | 'medium' | 'strong') {
+    switch (value) {
+        case 'strong':
+            return '强';
+        case 'medium':
+            return '中';
+        case 'weak':
+            return '弱';
+        default:
+            return '弱';
+    }
+}
+
 function formatDateTime(dateStr: string) {
     const date = new Date(dateStr);
     if (Number.isNaN(date.getTime())) {
@@ -126,8 +182,10 @@ function formatDateTime(dateStr: string) {
     return date.toLocaleString('zh-CN', {hour12: false});
 }
 
-function getTraceStatusLabel(status: 'done' | 'skipped' | 'failed') {
+function getTraceStatusLabel(status: 'running' | 'done' | 'skipped' | 'failed') {
     switch (status) {
+        case 'running':
+            return '进行中';
         case 'done':
             return '完成';
         case 'skipped':
@@ -139,8 +197,10 @@ function getTraceStatusLabel(status: 'done' | 'skipped' | 'failed') {
     }
 }
 
-function getTraceStatusClassName(status: 'done' | 'skipped' | 'failed') {
+function getTraceStatusClassName(status: 'running' | 'done' | 'skipped' | 'failed') {
     switch (status) {
+        case 'running':
+            return 'bg-accent/10 text-accent animate-pulse';
         case 'done':
             return 'bg-accent/10 text-accent';
         case 'skipped':
@@ -149,6 +209,62 @@ function getTraceStatusClassName(status: 'done' | 'skipped' | 'failed') {
             return 'bg-danger/10 text-danger';
         default:
             return 'bg-bg-hover text-text-secondary';
+    }
+}
+
+function getIndustrySentimentClassName(sentiment: '利好' | '利空' | '中性') {
+    switch (sentiment) {
+        case '利好':
+            return 'bg-accent/10 text-accent';
+        case '利空':
+            return 'bg-danger/10 text-danger';
+        default:
+            return 'bg-bg-hover text-text-secondary';
+    }
+}
+
+function explainNewsType(type: '政策' | '行业' | '公司' | '宏观' | '事件驱动' | '其他') {
+    switch (type) {
+        case '政策':
+            return '通常是监管或部门文件，先看执行力度和落地时间。';
+        case '行业':
+            return '属于板块层面的变化，常影响一批公司而不是单家公司。';
+        case '公司':
+            return '主要影响个股基本面，关注订单、利润和估值变化。';
+        case '宏观':
+            return '影响市场风险偏好，常先作用于指数和大盘风格。';
+        case '事件驱动':
+            return '突发消息带来的短线波动，持续性不一定强。';
+        default:
+            return '信息不足或归因不明确，建议先观察。';
+    }
+}
+
+function explainSignalCategory(category: '情绪噪音' | '短期事件' | '中期逻辑' | '长期趋势') {
+    switch (category) {
+        case '情绪噪音':
+            return '大概率只影响情绪，不足以支撑持续行情。';
+        case '短期事件':
+            return '通常在 1-3 天内交易，过期后影响快速衰减。';
+        case '中期逻辑':
+            return '一般对应 1-3 个月主线，需要持续验证数据。';
+        case '长期趋势':
+            return '半年以上的方向，核心看产业和业绩兑现。';
+        default:
+            return '';
+    }
+}
+
+function explainOpportunityType(type: '情绪题材' | '趋势机会' | '基本面机会' | '观察') {
+    switch (type) {
+        case '情绪题材':
+            return '更看情绪与资金博弈，波动大、节奏快。';
+        case '趋势机会':
+            return '更看连续性，重在跟随而非猜顶猜底。';
+        case '基本面机会':
+            return '更看业绩与估值匹配，适合耐心跟踪。';
+        default:
+            return '当前更适合学习与观察，不建议激进交易。';
     }
 }
 
@@ -208,20 +324,24 @@ function EntitySection({
 export function AnalysisView({
     initialMode,
     initialNewsId,
+    initialNewsTitle,
     initialQuery,
 }: {
     initialMode: AnalysisMode;
     initialNewsId?: string;
+    initialNewsTitle?: string;
     initialQuery?: string;
 }) {
     const [mode, setMode] = useState<AnalysisMode>(initialMode);
     const [newsId, setNewsId] = useState(initialNewsId ?? '');
+    const [newsTitle, setNewsTitle] = useState(initialNewsTitle ?? '');
     const [query, setQuery] = useState(initialQuery ?? '');
     const [result, setResult] = useState<AnalysisResult | null>(null);
     const [liveTrace, setLiveTrace] = useState<TraceViewModel | null>(null);
     const [traceCollapsed, setTraceCollapsed] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [knowledgeQuickView, setKnowledgeQuickView] = useState(true);
     const inFlightRequestKeyRef = useRef<string | null>(null);
     const initialAutoRunKeyRef = useRef<string | null>(null);
 
@@ -350,15 +470,22 @@ export function AnalysisView({
                     if (!finalPayload) {
                         throw new Error('流式分析未返回最终结果');
                     }
-                    setResult(finalPayload);
+                    const streamResult = finalPayload as AnalysisResult;
+                    setResult(streamResult);
+                    if (streamResult.news?.title) {
+                        setNewsTitle(streamResult.news.title);
+                    }
                     setLiveTrace(null);
                     setTraceCollapsed(true);
                 } else {
-                    const payload = await response.json();
+                    const payload = (await response.json()) as AnalysisResult & {error?: {message?: string}};
                     if (!response.ok) {
                         throw new Error(payload?.error?.message ?? '分析失败，请稍后重试');
                     }
                     setResult(payload);
+                    if (payload?.news?.title) {
+                        setNewsTitle(payload.news.title);
+                    }
                     setTraceCollapsed(true);
                 }
             } catch (requestError) {
@@ -435,17 +562,34 @@ export function AnalysisView({
                 {mode === 'news' ? (
                     <div className="space-y-3 lg:flex lg:items-end lg:gap-3 lg:space-y-0">
                         <div className="flex-1">
-                            <label className="mb-1 block text-xs text-text-secondary">新闻 ID</label>
-                            <div className="relative">
-                                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
-                                <input
-                                    type="text"
-                                    value={newsId}
-                                    onChange={(event) => setNewsId(event.target.value)}
-                                    placeholder="从新闻卡片跳转时会自动带入"
-                                    className="h-11 w-full rounded-xl border border-border bg-bg-base pl-10 pr-4 text-sm text-text-primary placeholder:text-text-disabled focus:border-accent focus:outline-none"
-                                />
-                            </div>
+                            {newsTitle.trim() ? (
+                                <>
+                                    <label className="mb-1 block text-xs text-text-secondary">新闻标题</label>
+                                    <div className="h-11 w-full rounded-xl border border-border bg-bg-base px-4 text-sm leading-[44px] text-text-primary">
+                                        {newsTitle}
+                                    </div>
+                                    <div className="mt-1 text-[11px] text-text-disabled">
+                                        内部标识：{newsId}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <label className="mb-1 block text-xs text-text-secondary">新闻 ID</label>
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-disabled" />
+                                        <input
+                                            type="text"
+                                            value={newsId}
+                                            onChange={(event) => {
+                                                setNewsId(event.target.value);
+                                                setNewsTitle('');
+                                            }}
+                                            placeholder="从新闻卡片跳转时会自动带入"
+                                            className="h-11 w-full rounded-xl border border-border bg-bg-base pl-10 pr-4 text-sm text-text-primary placeholder:text-text-disabled focus:border-accent focus:outline-none"
+                                        />
+                                    </div>
+                                </>
+                            )}
                         </div>
                         <button
                             onClick={() => void runAnalysis('news')}
@@ -552,6 +696,16 @@ export function AnalysisView({
 
                     {(result.news || result.query) && (
                         <div className="rounded-2xl border border-border bg-bg-card p-5">
+                            <div className="mb-4 flex items-center justify-between gap-3">
+                                <div className="text-xs text-text-secondary">解读层级</div>
+                                <button
+                                    type="button"
+                                    onClick={() => setKnowledgeQuickView((prev) => !prev)}
+                                    className="rounded-full bg-bg-hover px-3 py-1 text-xs font-medium text-text-secondary transition-colors hover:text-text-primary"
+                                >
+                                    {knowledgeQuickView ? '切换到深度拆解' : '切换到知识速览'}
+                                </button>
+                            </div>
                             {result.cache && (
                                 <div className="mb-4 rounded-xl border border-accent/20 bg-accent/5 px-3 py-2 text-xs text-text-secondary">
                                     {result.cache.hit
@@ -752,12 +906,26 @@ export function AnalysisView({
                                 <div className="rounded-2xl border border-warning/30 bg-warning/5 p-5">
                                     <div className="mb-3 flex items-center justify-between gap-3">
                                         <h3 className="text-sm font-medium text-text-primary">模型补充观察</h3>
-                                        <ResultBadge
-                                            label="观察类型"
-                                            value={getObservationTypeLabel(result.observation.observationType)}
-                                        />
+                                        <div className="flex flex-wrap gap-2">
+                                            <ResultBadge
+                                                label="观察类型"
+                                                value={getObservationTypeLabel(result.observation.observationType)}
+                                            />
+                                            {result.observation.tradeValue && (
+                                                <ResultBadge
+                                                    label="交易价值"
+                                                    value={getTradeValueLabel(result.observation.tradeValue)}
+                                                />
+                                            )}
+                                        </div>
                                     </div>
                                     <p className="text-sm leading-7 text-text-primary">{result.observation.summary}</p>
+
+                                    {result.observation.marketSignal && (
+                                        <div className="mt-3 rounded-xl bg-bg-hover px-3 py-2 text-sm text-text-primary">
+                                            市场信号：{result.observation.marketSignal}
+                                        </div>
+                                    )}
 
                                     {result.observation.directions.length > 0 && (
                                         <div className="mt-4">
@@ -774,6 +942,44 @@ export function AnalysisView({
                                                     </div>
                                                 ))}
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {result.observation.possibleDrivers && result.observation.possibleDrivers.length > 0 && (
+                                        <div className="mt-4">
+                                            <div className="mb-2 text-xs font-medium uppercase text-text-secondary">可能驱动</div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {result.observation.possibleDrivers.map((item, index) => (
+                                                    <span
+                                                        key={index}
+                                                        className="rounded-full bg-bg-hover px-3 py-1 text-xs text-text-primary"
+                                                    >
+                                                        {item}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {result.observation.mappedSectors && result.observation.mappedSectors.length > 0 && (
+                                        <div className="mt-4">
+                                            <div className="mb-2 text-xs font-medium uppercase text-text-secondary">映射方向</div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {result.observation.mappedSectors.map((item, index) => (
+                                                    <span
+                                                        key={index}
+                                                        className="rounded-full bg-accent/10 px-3 py-1 text-xs text-accent"
+                                                    >
+                                                        {item}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {result.observation.aShareImpact && (
+                                        <div className="mt-4 rounded-xl bg-accent/5 px-3 py-2 text-sm text-text-primary">
+                                            A股联动：{result.observation.aShareImpact}
                                         </div>
                                     )}
 
@@ -798,6 +1004,251 @@ export function AnalysisView({
                                 <div className="rounded-2xl border border-border bg-bg-card p-5">
                                     <h3 className="mb-3 text-sm font-medium text-text-primary">AI 结论</h3>
                                     <p className="text-sm leading-7 text-text-primary">{result.report.summary}</p>
+
+                                    {result.report.professionalAnalysis && (
+                                        <div className="mt-4 space-y-4">
+                                            <div className="rounded-xl border border-accent/25 bg-accent/5 p-4">
+                                                <div className="mb-2 text-sm font-medium text-text-primary">商业知识解读（先看这个）</div>
+                                                <div className="space-y-2 text-sm text-text-primary">
+                                                    <div>
+                                                        这条新闻在说：{result.report.professionalAnalysis.coreEvent || result.report.summary}
+                                                    </div>
+                                                    <div>
+                                                        对股价的影响通常来自：
+                                                        {result.report.professionalAnalysis.impactMechanism[0] ||
+                                                            result.report.professionalAnalysis.industryImpacts[0]?.path ||
+                                                            '市场预期变化'}
+                                                    </div>
+                                                    <div>
+                                                        当前判断：{explainSignalCategory(result.report.professionalAnalysis.signalCategory)}
+                                                    </div>
+                                                    <div>
+                                                        商业解读结论：
+                                                        {result.report.professionalAnalysis.tradingView.worthTracking
+                                                            ? '该信息具备跟踪价值，优先验证成交量、产业链反馈和持续催化。'
+                                                            : '该信息更偏情绪扰动，缺少可持续的商业变量支撑。'}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="rounded-xl border border-border bg-bg-hover/50 p-4">
+                                                <div className="mb-3 flex flex-wrap gap-2">
+                                                    <ResultBadge label="新闻类型" value={result.report.professionalAnalysis.newsType} />
+                                                    <ResultBadge
+                                                        label="信号分层"
+                                                        value={result.report.professionalAnalysis.signalCategory}
+                                                    />
+                                                    <ResultBadge
+                                                        label="影响期限"
+                                                        value={result.report.professionalAnalysis.impactTerm}
+                                                    />
+                                                    <ResultBadge
+                                                        label="可跟踪性"
+                                                        value={
+                                                            result.report.professionalAnalysis.tradingView.worthTracking
+                                                                ? '值得关注'
+                                                                : '不建议交易'
+                                                        }
+                                                    />
+                                                </div>
+                                                <div className="mb-2 rounded-xl bg-bg-card px-3 py-2 text-xs text-text-secondary">
+                                                    术语翻译：新闻类型={explainNewsType(result.report.professionalAnalysis.newsType)}
+                                                </div>
+                                                <div className="mb-2 rounded-xl bg-bg-card px-3 py-2 text-xs text-text-secondary">
+                                                    术语翻译：机会类型=
+                                                    {explainOpportunityType(
+                                                        result.report.professionalAnalysis.tradingView.opportunityType
+                                                    )}
+                                                </div>
+                                                <div className="text-xs text-text-secondary">核心事件</div>
+                                                <div className="mt-1 text-sm font-medium text-text-primary">
+                                                    {result.report.professionalAnalysis.coreEvent || '未提炼核心事件'}
+                                                </div>
+                                                {result.report.professionalAnalysis.eventWindow && (
+                                                    <div className="mt-2 text-xs text-text-secondary">
+                                                        时效窗口：{result.report.professionalAnalysis.eventWindow}
+                                                    </div>
+                                                )}
+                                                {result.report.professionalAnalysis.noTradeReason && (
+                                                    <div className="mt-3 rounded-xl bg-warning/10 px-3 py-2 text-sm text-warning">
+                                                        无交易价值：{result.report.professionalAnalysis.noTradeReason}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {!knowledgeQuickView && result.report.professionalAnalysis.impactMechanism.length > 0 && (
+                                                <div>
+                                                    <div className="mb-2 text-xs font-medium uppercase text-text-secondary">
+                                                        商业本质变化
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {result.report.professionalAnalysis.impactMechanism.map((item, index) => (
+                                                            <div
+                                                                key={index}
+                                                                className="rounded-xl bg-bg-hover px-3 py-2 text-sm text-text-primary"
+                                                            >
+                                                                {item}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {!knowledgeQuickView && result.report.professionalAnalysis.industryImpacts.length > 0 && (
+                                                <div>
+                                                    <div className="mb-2 text-xs font-medium uppercase text-text-secondary">
+                                                        行业影响路径
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {result.report.professionalAnalysis.industryImpacts.map((item, index) => (
+                                                            <div key={index} className="rounded-xl bg-bg-hover p-3">
+                                                                <div className="mb-2 flex items-center justify-between gap-3">
+                                                                    <div className="text-sm font-medium text-text-primary">
+                                                                        {item.industry}
+                                                                    </div>
+                                                                    <span
+                                                                        className={`rounded-full px-2 py-1 text-[11px] font-medium ${getIndustrySentimentClassName(item.sentiment)}`}
+                                                                    >
+                                                                        {item.sentiment}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="text-xs leading-6 text-text-secondary">
+                                                                    {item.path}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {!knowledgeQuickView &&
+                                                (result.report.professionalAnalysis.chainAnalysis.upstream.length > 0 ||
+                                                    result.report.professionalAnalysis.chainAnalysis.midstream.length > 0 ||
+                                                    result.report.professionalAnalysis.chainAnalysis.downstream.length > 0) && (
+                                                <div>
+                                                    <div className="mb-2 text-xs font-medium uppercase text-text-secondary">
+                                                        产业链拆解
+                                                    </div>
+                                                    <div className="grid gap-2 sm:grid-cols-3">
+                                                        <div className="rounded-xl bg-bg-hover p-3">
+                                                            <div className="text-xs text-text-secondary">上游</div>
+                                                            <div className="mt-1 text-sm text-text-primary">
+                                                                {result.report.professionalAnalysis.chainAnalysis.upstream.join('、') ||
+                                                                    '暂无'}
+                                                            </div>
+                                                        </div>
+                                                        <div className="rounded-xl bg-bg-hover p-3">
+                                                            <div className="text-xs text-text-secondary">中游</div>
+                                                            <div className="mt-1 text-sm text-text-primary">
+                                                                {result.report.professionalAnalysis.chainAnalysis.midstream.join('、') ||
+                                                                    '暂无'}
+                                                            </div>
+                                                        </div>
+                                                        <div className="rounded-xl bg-bg-hover p-3">
+                                                            <div className="text-xs text-text-secondary">下游</div>
+                                                            <div className="mt-1 text-sm text-text-primary">
+                                                                {result.report.professionalAnalysis.chainAnalysis.downstream.join('、') ||
+                                                                    '暂无'}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    {(result.report.professionalAnalysis.chainAnalysis.mostBenefitedLink ||
+                                                        result.report.professionalAnalysis.chainAnalysis.reason) && (
+                                                        <div className="mt-2 rounded-xl bg-accent/5 px-3 py-2 text-sm text-text-primary">
+                                                            最受益环节：
+                                                            {result.report.professionalAnalysis.chainAnalysis.mostBenefitedLink ||
+                                                                '未明确'}
+                                                            {result.report.professionalAnalysis.chainAnalysis.reason
+                                                                ? `；${result.report.professionalAnalysis.chainAnalysis.reason}`
+                                                                : ''}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                )}
+
+                                            {!knowledgeQuickView && result.report.professionalAnalysis.aShareMapping.length > 0 && (
+                                                <div>
+                                                    <div className="mb-2 text-xs font-medium uppercase text-text-secondary">
+                                                        A股映射
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {result.report.professionalAnalysis.aShareMapping.map((item, index) => (
+                                                            <div key={`${item.stockCode}-${index}`} className="rounded-xl bg-bg-hover p-3">
+                                                                <div className="flex flex-wrap items-center gap-2">
+                                                                    <div className="text-sm font-medium text-text-primary">
+                                                                        {item.companyName || item.stockName || item.stockCode}
+                                                                    </div>
+                                                                    {item.stockCode && (
+                                                                        <span className="rounded-full bg-bg-card px-2 py-1 text-[11px] text-text-secondary">
+                                                                            {item.stockCode}
+                                                                        </span>
+                                                                    )}
+                                                                    <span className="rounded-full bg-accent/10 px-2 py-1 text-[11px] text-accent">
+                                                                        弹性 {item.elasticity}
+                                                                    </span>
+                                                                    <span className="rounded-full bg-warning/10 px-2 py-1 text-[11px] text-warning">
+                                                                        情绪龙头潜力 {item.leaderPotential}
+                                                                    </span>
+                                                                </div>
+                                                                {item.logic && (
+                                                                    <div className="mt-2 text-xs leading-6 text-text-secondary">
+                                                                        {item.logic}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <div className="rounded-xl border border-border bg-bg-hover/60 p-4">
+                                                <div className="mb-2 text-xs font-medium uppercase text-text-secondary">交易视角</div>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <ResultBadge
+                                                        label="机会类型"
+                                                        value={result.report.professionalAnalysis.tradingView.opportunityType}
+                                                    />
+                                                    <ResultBadge
+                                                        label="持续性"
+                                                        value={result.report.professionalAnalysis.tradingView.sustainability}
+                                                    />
+                                                    <ResultBadge
+                                                        label="可交易性"
+                                                        value={result.report.professionalAnalysis.tradingView.tradability}
+                                                    />
+                                                </div>
+                                                {result.report.professionalAnalysis.tradingView.tradeValueSummary && (
+                                                    <div className="mt-2 text-sm text-text-primary">
+                                                        {result.report.professionalAnalysis.tradingView.tradeValueSummary}
+                                                    </div>
+                                                )}
+                                                {result.report.professionalAnalysis.tradingView.strategy.length > 0 && (
+                                                    <div className="mt-2 text-xs text-text-secondary">
+                                                        策略建议：{result.report.professionalAnalysis.tradingView.strategy.join('、')}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {(!knowledgeQuickView || !result.report.professionalAnalysis.tradingView.worthTracking) &&
+                                                result.report.professionalAnalysis.falsificationPoints.length > 0 && (
+                                                <div>
+                                                    <div className="mb-2 text-xs font-medium uppercase text-text-secondary">
+                                                        证伪点
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {result.report.professionalAnalysis.falsificationPoints.map((item, index) => (
+                                                            <div
+                                                                key={index}
+                                                                className="rounded-xl bg-warning/10 px-3 py-2 text-sm text-warning"
+                                                            >
+                                                                {item}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
 
                                     {result.report.reasoning.length > 0 && (
                                         <div className="mt-4">

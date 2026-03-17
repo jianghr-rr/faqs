@@ -65,6 +65,44 @@ export type ResearchReport = {
     summary: string;
     reasoning: string[];
     risks: string[];
+    professionalAnalysis?: {
+        coreEvent: string;
+        newsType: '政策' | '行业' | '公司' | '宏观' | '事件驱动' | '其他';
+        signalCategory: '情绪噪音' | '短期事件' | '中期逻辑' | '长期趋势';
+        eventWindow: string;
+        impactMechanism: string[];
+        impactTerm: '短期' | '中期' | '长期' | '混合';
+        industryImpacts: Array<{
+            industry: string;
+            sentiment: '利好' | '利空' | '中性';
+            path: string;
+        }>;
+        chainAnalysis: {
+            upstream: string[];
+            midstream: string[];
+            downstream: string[];
+            mostBenefitedLink: string;
+            reason: string;
+        };
+        aShareMapping: Array<{
+            stockCode: string;
+            stockName: string;
+            companyName: string;
+            logic: string;
+            elasticity: '高' | '中' | '低';
+            leaderPotential: '高' | '中' | '低';
+        }>;
+        tradingView: {
+            opportunityType: '情绪题材' | '趋势机会' | '基本面机会' | '观察';
+            sustainability: '强' | '中' | '弱';
+            tradability: '强' | '中' | '弱';
+            strategy: string[];
+            worthTracking: boolean;
+            tradeValueSummary: string;
+        };
+        falsificationPoints: string[];
+        noTradeReason: string;
+    };
 };
 
 export type ResearchResultConfidence = 'high' | 'medium' | 'low';
@@ -92,15 +130,21 @@ export type MentionedCompany = {
 };
 
 export type ModelObservationType = 'macro_market' | 'sector_theme' | 'industry_chain' | 'event_driver';
+export type NewsClassificationType = 'event_driven' | 'data_release' | 'market_status' | 'noise';
 
 export type ModelObservation = {
     observationType: ModelObservationType;
     summary: string;
     directions: string[];
     risks: string[];
+    marketSignal?: string;
+    possibleDrivers?: string[];
+    mappedSectors?: string[];
+    aShareImpact?: string;
+    tradeValue?: 'weak' | 'medium' | 'strong';
 };
 
-export type ResearchTraceStepStatus = 'done' | 'skipped' | 'failed';
+export type ResearchTraceStepStatus = 'running' | 'done' | 'skipped' | 'failed';
 
 export type ResearchTraceStep = {
     name: string;

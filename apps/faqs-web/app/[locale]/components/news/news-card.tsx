@@ -81,8 +81,8 @@ export function NewsCard({
     const SentimentIcon = sentimentInfo?.icon;
     const analysisHref = id
         ? isLoggedIn
-            ? `/analysis?mode=news&newsId=${id}`
-            : `/login?next=${encodeURIComponent(`/analysis?mode=news&newsId=${id}`)}`
+            ? `/analysis?mode=news&newsId=${id}&newsTitle=${encodeURIComponent(title)}`
+            : `/login?next=${encodeURIComponent(`/analysis?mode=news&newsId=${id}&newsTitle=${encodeURIComponent(title)}`)}`
         : null;
 
     return (

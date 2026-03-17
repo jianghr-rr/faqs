@@ -1,11 +1,13 @@
 import {Annotation, END, START, StateGraph} from '@langchain/langgraph';
 import {
+    classifyNewsType,
     extractMentionedCompanies,
     extractGroundedNewsSearchHints,
     extractNewsSearchHints,
     generateModelOnlyObservation,
     generateResearchReport,
     rerankCandidateStocksWithAi,
+    selfCheckResearchReport,
     validateSectorRelevanceWithAi,
 } from '~/lib/ai/models/client';
 import {getEnv} from '~/lib/env';
@@ -48,6 +50,8 @@ const ResearchWorkflowStateAnnotation = Annotation.Root({
     report: Annotation<ResearchReport | null>,
     observation: Annotation<ModelObservation | null>,
     resultMeta: Annotation<ResearchResultMeta>,
+    newsType: Annotation<'event_driven' | 'data_release' | 'market_status' | 'noise'>,
+    newsTypeReason: Annotation<string>,
 });
 
 type ResearchWorkflowState = typeof ResearchWorkflowStateAnnotation.State;
@@ -63,6 +67,7 @@ const traceCollectors = new Map<string, WorkflowTraceCollector>();
 const traceStepListeners = new Map<string, (step: ResearchTraceStep) => void | Promise<void>>();
 
 const NODE_LABEL_MAP: Record<string, string> = {
+    classifyNewsType: '新闻类型分类',
     extractNewsHints: '提取新闻线索',
     webSearchContext: '外部搜索补充',
     extractGroundedHints: '基于证据二次提炼',
@@ -73,8 +78,41 @@ const NODE_LABEL_MAP: Record<string, string> = {
     rankStocks: '规则排序',
     rerankStocks: '模型重排',
     generateReport: '生成结构化结论',
+    selfCheckReport: '报告一致性自检',
     generateObservation: '生成观察结论',
 };
+
+function getRunningSummary(nodeName: string, state: ResearchWorkflowState) {
+    switch (nodeName) {
+        case 'extractNewsHints':
+            return `正在提炼新闻关键词（文本 ${state.rawText.length} 字）`;
+        case 'classifyNewsType':
+            return '正在识别新闻类型';
+        case 'webSearchContext':
+            return `正在外部检索（关键词 ${state.searchKeywords.length} 个）`;
+        case 'extractGroundedHints':
+            return `正在基于证据重写关键词（证据 ${state.webSearchEvidence.length} 条）`;
+        case 'searchKgContext':
+            return `正在检索图谱上下文（关键词 ${state.searchKeywords.length} 个）`;
+        case 'resolveEntities':
+            return `正在解析实体与候选（标签 ${state.searchKeywords.length + state.searchContextTags.length} 个）`;
+        case 'validateSectorRelevance':
+            return `正在校验行业相关性（行业 ${state.matchedEntities.industries.length} 个）`;
+        case 'fillFallbackStocks':
+            return '正在执行低置信标的补全';
+        case 'rankStocks':
+        case 'rerankStocks':
+            return `正在排序候选（当前 ${state.candidateStocks.length} 个）`;
+        case 'generateReport':
+            return '正在生成结构化结论';
+        case 'selfCheckReport':
+            return '正在执行报告一致性自检';
+        case 'generateObservation':
+            return '正在生成观察结论';
+        default:
+            return '开始执行...';
+    }
+}
 
 function logNodeStart(requestId: string, nodeName: string) {
     console.info(`[research-workflow] requestId=${requestId} node=${nodeName} phase=start`);
@@ -97,37 +135,45 @@ function summarizeNodeResult(
     state: ResearchWorkflowState,
     result: Partial<ResearchWorkflowState> | ResearchWorkflowState
 ) {
+    const keywordPreview = (keywords: string[]) => keywords.slice(0, 5).join('、') || '无';
     switch (nodeName) {
         case 'extractNewsHints': {
             const nextKeywords = result.searchKeywords ?? [];
-            const sample = nextKeywords.slice(0, 3).join('、');
+            const sample = keywordPreview(nextKeywords);
             const angle = result.analysisAngle ? `，角度「${result.analysisAngle}」` : '';
-            return sample
-                ? `提取 ${nextKeywords.length} 个关键词（${sample}）${angle}`
-                : `未提取到有效关键词${angle}`;
+            return `输入新闻 ${state.rawText.length} 字；提取关键词 ${nextKeywords.length} 个（${sample}）${angle}`;
+        }
+        case 'classifyNewsType': {
+            const nextType = result.newsType ?? state.newsType;
+            const reason = result.newsTypeReason || state.newsTypeReason || '无';
+            return `新闻类型：${nextType}；原因：${reason}`;
         }
         case 'webSearchContext': {
             const evidenceCount = (result.webSearchEvidence ?? []).length;
             const query = result.webSearchQuery || state.webSearchQuery;
             if (evidenceCount === 0) {
-                return query ? `检索查询已执行（${query}），未返回有效外部证据` : '未返回有效外部证据';
+                return query
+                    ? `执行外部检索（query: ${query}）；返回证据 0 条（可能超时或相关性过滤后为空）`
+                    : '执行外部检索；返回证据 0 条（可能超时或相关性过滤后为空）';
             }
-            return query ? `检索查询：${query}，获取外部证据 ${evidenceCount} 条` : `获取外部证据 ${evidenceCount} 条`;
+            return query ? `检索查询：${query}；获取外部证据 ${evidenceCount} 条` : `获取外部证据 ${evidenceCount} 条`;
         }
         case 'extractGroundedHints': {
             if (isEmptyNodeResult(result)) {
-                return '无可用外部证据，已跳过';
+                return '输入证据 0 条，跳过二次提炼';
             }
             const before = state.searchKeywords.length;
             const after = (result.searchKeywords ?? state.searchKeywords).length;
-            return `基于外部证据重写关键词：${before} -> ${after}`;
+            return `基于外部证据重写关键词：${before} -> ${after}；当前关键词：${keywordPreview(
+                result.searchKeywords ?? state.searchKeywords
+            )}`;
         }
         case 'searchKgContext': {
             if (result.kgCoverageMiss) {
-                return '图谱覆盖不足，跳过上下文扩展';
+                return '检测到图谱覆盖盲区关键词，跳过上下文扩展';
             }
             const tags = (result.searchContextTags ?? []).length;
-            return `使用 ${state.searchKeywords.slice(0, 8).length} 个关键词检索图谱，上下文标签 ${tags} 个`;
+            return `使用 ${state.searchKeywords.slice(0, 8).length} 个关键词检索图谱；命中上下文标签 ${tags} 个`;
         }
         case 'resolveEntities': {
             const themes = (result.matchedEntities?.themes ?? []).length;
@@ -136,22 +182,22 @@ function summarizeNodeResult(
             const companies = (result.matchedEntities?.companies ?? []).length;
             const reasoning = (result.reasoningPaths ?? []).length;
             const candidates = (result.candidateStocks ?? []).length;
-            return `命中主题 ${themes}、行业 ${industries}、环节 ${chainNodes}、公司 ${companies}；推理 ${reasoning} 条，候选 ${candidates} 个`;
+            return `实体命中：主题 ${themes}、行业 ${industries}、环节 ${chainNodes}、公司 ${companies}；推理路径 ${reasoning} 条，候选 ${candidates} 个`;
         }
         case 'validateSectorRelevance': {
             if (isEmptyNodeResult(result)) {
-                return '无行业命中或无需校验，已跳过';
+                return '行业命中为空，跳过相关性校验';
             }
             const before = state.matchedEntities.industries.length;
             const industries = (result.matchedEntities?.industries ?? state.matchedEntities.industries).length;
-            return `行业相关性校验后保留 ${industries}/${before} 个行业`;
+            return `行业相关性校验：保留 ${industries}/${before} 个行业`;
         }
         case 'fillFallbackStocks': {
             if (isEmptyNodeResult(result)) {
                 if (hasStructuredResult(state) && hasDirectResult(state)) {
-                    return '已有直接图谱命中，跳过低置信补全';
+                    return '已有直接图谱高置信命中，跳过低置信补全';
                 }
-                return '无需补全候选';
+                return `低置信补全未产出候选（当前候选 ${state.candidateStocks.length} 个）`;
             }
             const before = state.candidateStocks.length;
             const candidates = (result.candidateStocks ?? state.candidateStocks).length;
@@ -163,14 +209,20 @@ function summarizeNodeResult(
             const candidates = ranked.length;
             const top = ranked[0];
             if (!top) {
-                return '无候选可排序';
+                return '候选为空，无需排序';
             }
-            return `候选 ${candidates} 个，TOP1：${top.companyName}(${top.stockCode})`;
+            return `候选 ${candidates} 个；TOP1：${top.companyName}(${top.stockCode})`;
         }
         case 'generateReport': {
             const reasoningCount = state.reasoningPaths.length;
             const candidateCount = state.candidateStocks.length;
-            return `已生成 AI 结论（推理 ${reasoningCount} 条，候选 ${candidateCount} 个）`;
+            return `已生成结构化结论（推理 ${reasoningCount} 条，候选 ${candidateCount} 个）`;
+        }
+        case 'selfCheckReport': {
+            if (isEmptyNodeResult(result)) {
+                return '自检通过，无需修正';
+            }
+            return '自检发现可修正点，已更新报告表达';
         }
         case 'generateObservation': {
             const type = result.observation?.observationType ?? state.observation?.observationType;
@@ -199,6 +251,13 @@ function withNodeTiming(nodeName: string, node: ResearchWorkflowNode): ResearchW
     return async (state) => {
         const requestId = state.requestId || 'unknown';
         const start = Date.now();
+        appendTraceStep(requestId, {
+            name: nodeName,
+            label: NODE_LABEL_MAP[nodeName] ?? nodeName,
+            status: 'running',
+            elapsedMs: 0,
+            summary: getRunningSummary(nodeName, state),
+        });
         logNodeStart(requestId, nodeName);
         try {
             const result = await node(state);
@@ -298,9 +357,23 @@ async function extractNewsHintsNode(state: ResearchWorkflowState) {
     }
 
     const llmStart = Date.now();
+    appendTraceStep(state.requestId, {
+        name: 'extractNewsHints.extractNewsSearchHints',
+        label: '关键词提炼',
+        status: 'running',
+        elapsedMs: 0,
+        summary: `正在提炼关键词（文本 ${state.rawText.length} 字）`,
+    });
     console.info(`[research-workflow] requestId=${state.requestId} node=extractNewsHints substep=extractNewsSearchHints phase=start`);
     const result = await extractNewsSearchHints({
         rawText: state.rawText,
+    });
+    appendTraceStep(state.requestId, {
+        name: 'extractNewsHints.extractNewsSearchHints',
+        label: '关键词提炼',
+        status: 'done',
+        elapsedMs: Date.now() - llmStart,
+        summary: `提炼完成：关键词 ${result.keywords.length} 个，标签 ${result.tags.length} 个`,
     });
     console.info(
         `[research-workflow] requestId=${state.requestId} node=extractNewsHints substep=extractNewsSearchHints phase=done elapsedMs=${
@@ -311,6 +384,23 @@ async function extractNewsHintsNode(state: ResearchWorkflowState) {
     return {
         searchKeywords: [...new Set([...result.keywords, ...result.tags])].slice(0, 12),
         analysisAngle: result.angle,
+    };
+}
+
+async function classifyNewsTypeNode(state: ResearchWorkflowState) {
+    if (state.mode !== 'news_analysis') {
+        return {
+            newsType: 'event_driven' as const,
+            newsTypeReason: '查询研究模式默认按事件驱动处理。',
+        };
+    }
+
+    const result = await classifyNewsType({
+        rawText: state.rawText,
+    });
+    return {
+        newsType: result.type,
+        newsTypeReason: result.reason,
     };
 }
 
@@ -380,6 +470,14 @@ function routeAfterSearchKgContext(_state: ResearchWorkflowState) {
     return 'resolveEntities';
 }
 
+function routeAfterExtractGroundedHints(state: ResearchWorkflowState) {
+    if (state.newsType === 'market_status' || state.newsType === 'noise') {
+        return 'generateObservation';
+    }
+
+    return 'searchKgContext';
+}
+
 async function validateSectorRelevanceNode(state: ResearchWorkflowState) {
     if (state.mode !== 'news_analysis' || state.matchedEntities.industries.length === 0 || !getEnv().OPENAI_API_KEY) {
         return {};
@@ -447,6 +545,13 @@ async function fillFallbackStocksNode(state: ResearchWorkflowState) {
     }
 
     const extractStart = Date.now();
+    appendTraceStep(state.requestId, {
+        name: 'fillFallbackStocks.extractMentionedCompanies',
+        label: '提取新闻提及公司',
+        status: 'running',
+        elapsedMs: 0,
+        summary: `正在抽取公司线索（关键词 ${state.searchKeywords.length} 个）`,
+    });
     console.info(
         `[research-workflow] requestId=${state.requestId} node=fillFallbackStocks substep=extractMentionedCompanies phase=start`
     );
@@ -454,6 +559,13 @@ async function fillFallbackStocksNode(state: ResearchWorkflowState) {
         rawText: state.rawText,
         searchKeywords: state.searchKeywords,
         webSearchEvidence: state.webSearchEvidence,
+    });
+    appendTraceStep(state.requestId, {
+        name: 'fillFallbackStocks.extractMentionedCompanies',
+        label: '提取新闻提及公司',
+        status: 'done',
+        elapsedMs: Date.now() - extractStart,
+        summary: `抽取完成：提及公司 ${extracted.companies.length} 个`,
     });
     console.info(
         `[research-workflow] requestId=${state.requestId} node=fillFallbackStocks substep=extractMentionedCompanies phase=done elapsedMs=${
@@ -465,6 +577,13 @@ async function fillFallbackStocksNode(state: ResearchWorkflowState) {
     }
 
     const resolveStart = Date.now();
+    appendTraceStep(state.requestId, {
+        name: 'fillFallbackStocks.resolveFallbackStocksFromMentions',
+        label: '低置信标的映射',
+        status: 'running',
+        elapsedMs: 0,
+        summary: `正在映射标的（公司提及 ${extracted.companies.length} 个）`,
+    });
     console.info(
         `[research-workflow] requestId=${state.requestId} node=fillFallbackStocks substep=resolveFallbackStocksFromMentions phase=start mentionCount=${
             extracted.companies.length
@@ -474,6 +593,13 @@ async function fillFallbackStocksNode(state: ResearchWorkflowState) {
         mentions: extracted.companies,
         tickers: state.tickers,
         securityHints: state.securityHints,
+    });
+    appendTraceStep(state.requestId, {
+        name: 'fillFallbackStocks.resolveFallbackStocksFromMentions',
+        label: '低置信标的映射',
+        status: 'done',
+        elapsedMs: Date.now() - resolveStart,
+        summary: `映射完成：补全候选 ${fallbackStocks.length} 个`,
     });
     console.info(
         `[research-workflow] requestId=${state.requestId} node=fillFallbackStocks substep=resolveFallbackStocksFromMentions phase=done elapsedMs=${
@@ -566,12 +692,36 @@ async function generateModelOnlyObservationNode(state: ResearchWorkflowState) {
             rawText: state.rawText,
             searchKeywords: state.searchKeywords,
             webSearchEvidence: state.webSearchEvidence,
+            newsType: state.newsType,
         }),
         resultMeta: {
             confidence: 'low',
             sourceType: 'model_plus_search',
             validationStatus: 'model_only',
         } satisfies ResearchResultMeta,
+    };
+}
+
+async function selfCheckReportNode(state: ResearchWorkflowState) {
+    if (!state.report || !getEnv().OPENAI_API_KEY) {
+        return {};
+    }
+
+    const checked = await selfCheckResearchReport({
+        rawText: state.rawText,
+        reasoningPaths: state.reasoningPaths,
+        candidateStocks: state.candidateStocks,
+        matchedEntities: state.matchedEntities,
+        searchKeywords: state.searchKeywords,
+        webSearchEvidence: state.webSearchEvidence,
+        report: state.report,
+    });
+    if (JSON.stringify(checked) === JSON.stringify(state.report)) {
+        return {};
+    }
+
+    return {
+        report: checked,
     };
 }
 
@@ -589,6 +739,7 @@ function routeAfterRanking(state: ResearchWorkflowState) {
 }
 
 const researchWorkflowGraph = new StateGraph(ResearchWorkflowStateAnnotation)
+    .addNode('classifyNewsType', withNodeTiming('classifyNewsType', classifyNewsTypeNode))
     .addNode('extractNewsHints', withNodeTiming('extractNewsHints', extractNewsHintsNode))
     .addNode('webSearchContext', withNodeTiming('webSearchContext', webSearchContextNode))
     .addNode('extractGroundedHints', withNodeTiming('extractGroundedHints', extractGroundedHintsNode))
@@ -599,11 +750,16 @@ const researchWorkflowGraph = new StateGraph(ResearchWorkflowStateAnnotation)
     .addNode('rankStocks', withNodeTiming('rankStocks', rankStocksNode))
     .addNode('rerankStocks', withNodeTiming('rerankStocks', rerankStocksNode))
     .addNode('generateReport', withNodeTiming('generateReport', generateReportNode))
+    .addNode('selfCheckReport', withNodeTiming('selfCheckReport', selfCheckReportNode))
     .addNode('generateObservation', withNodeTiming('generateObservation', generateModelOnlyObservationNode))
-    .addEdge(START, 'extractNewsHints')
+    .addEdge(START, 'classifyNewsType')
+    .addEdge('classifyNewsType', 'extractNewsHints')
     .addEdge('extractNewsHints', 'webSearchContext')
     .addEdge('webSearchContext', 'extractGroundedHints')
-    .addEdge('extractGroundedHints', 'searchKgContext')
+    .addConditionalEdges('extractGroundedHints', routeAfterExtractGroundedHints, {
+        searchKgContext: 'searchKgContext',
+        generateObservation: 'generateObservation',
+    })
     .addConditionalEdges('searchKgContext', routeAfterSearchKgContext, {
         resolveEntities: 'resolveEntities',
     })
@@ -616,7 +772,8 @@ const researchWorkflowGraph = new StateGraph(ResearchWorkflowStateAnnotation)
         generateObservation: 'generateObservation',
     })
     .addEdge('rerankStocks', 'generateReport')
-    .addEdge('generateReport', END)
+    .addEdge('generateReport', 'selfCheckReport')
+    .addEdge('selfCheckReport', END)
     .addEdge('generateObservation', END)
     .compile();
 
@@ -670,6 +827,8 @@ export async function runResearchWorkflow(input: {
                 sourceType: 'kg',
                 validationStatus: 'kg_verified',
             },
+            newsType: 'event_driven',
+            newsTypeReason: '',
         });
         const finishedAt = Date.now();
         const collector = traceCollectors.get(input.requestId);

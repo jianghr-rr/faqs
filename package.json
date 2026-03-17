@@ -10,7 +10,7 @@
         "g:lint": "TIMING=1 turbo run lint --cache-dir=.cache/turbo --color",
         "g:lint-staged-files": "lint-staged --allow-empty",
         "build-faqs-web": "turbo run build-faqs-web",
-        "start-faqs-web": "turbo run dev --filter=faqs-web",
+        "dev-faqs-web": "turbo run dev --filter=faqs-web",
         "prepare": "husky"
     },
     "devDependencies": {

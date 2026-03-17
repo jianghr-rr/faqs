@@ -8,27 +8,33 @@ import type {
     MentionedCompany,
     ModelObservation,
     ModelObservationType,
+    NewsClassificationType,
     ResearchEvidence,
     ResearchReport,
 } from '~/lib/kg/types';
 import {
     buildChatRewritePrompt,
+    buildNewsClassificationPrompt,
     buildGroundedNewsSearchHintsPrompt,
+    mapNewsClassificationLabel,
     buildMentionedCompaniesPrompt,
     buildModelOnlyObservationPrompt,
     buildNewsSearchHintsPrompt,
     buildResearchPrompt,
     buildResearchPromptVariables,
     buildResearchReportPrompt,
+    buildResearchSelfCheckPrompt,
     buildSectorRelevancePrompt,
     buildStockRerankPrompt,
     chatQueryRewriteSchema,
     groundedNewsSearchHintsSchema,
     mentionedCompaniesSchema,
     modelOnlyObservationSchema,
+    newsClassificationSchema,
     newsSearchHintsSchema,
     rerankedStocksSchema,
     researchReportSchema,
+    researchSelfCheckSchema,
     sectorRelevanceSchema,
     type ChatHistoryTurn,
 } from '~/lib/ai/prompts/research';
@@ -41,6 +47,7 @@ type GenerateReportInput = {
     searchKeywords?: string[];
     webSearchEvidence?: ResearchEvidence[];
 };
+type PromptVersion = 'v1' | 'v2';
 
 export type SectorRelevanceDecision = {
     industryId: string;
@@ -90,6 +97,28 @@ function getOpenAiProviderMeta() {
     };
 }
 
+function isTimeoutError(error: unknown) {
+    return error instanceof Error && error.name === 'TimeoutError';
+}
+
+async function withTimeout<T>(input: {operation: string; timeoutMs: number; run: () => Promise<T>}): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+        const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+                const error = new Error(`${input.operation} timed out after ${input.timeoutMs}ms`);
+                error.name = 'TimeoutError';
+                reject(error);
+            }, input.timeoutMs);
+        });
+        return await Promise.race([input.run(), timeoutPromise]);
+    } finally {
+        if (timeoutId) {
+            clearTimeout(timeoutId);
+        }
+    }
+}
+
 function clampScore(score: number) {
     return Math.max(0, Math.min(1, Number(score.toFixed(2))));
 }
@@ -118,11 +147,103 @@ function fallbackRewriteChatQuery(input: RewriteChatQueryInput) {
     return `${lastUserMessage}\n补充问题：${trimmed}`;
 }
 
-function sanitizeReport(report: Partial<ResearchReport> & {summary: string}): ResearchReport {
+type PartialProfessionalAnalysis = {
+    coreEvent?: string;
+    newsType?: '政策' | '行业' | '公司' | '宏观' | '事件驱动' | '其他';
+    signalCategory?: '情绪噪音' | '短期事件' | '中期逻辑' | '长期趋势';
+    eventWindow?: string;
+    impactMechanism?: string[];
+    impactTerm?: '短期' | '中期' | '长期' | '混合';
+    industryImpacts?: Array<{
+        industry?: string;
+        sentiment?: '利好' | '利空' | '中性';
+        path?: string;
+    }>;
+    chainAnalysis?: {
+        upstream?: string[];
+        midstream?: string[];
+        downstream?: string[];
+        mostBenefitedLink?: string;
+        reason?: string;
+    };
+    aShareMapping?: Array<{
+        stockCode?: string;
+        stockName?: string;
+        companyName?: string;
+        logic?: string;
+        elasticity?: '高' | '中' | '低';
+        leaderPotential?: '高' | '中' | '低';
+    }>;
+    tradingView?: {
+        opportunityType?: '情绪题材' | '趋势机会' | '基本面机会' | '观察';
+        sustainability?: '强' | '中' | '弱';
+        tradability?: '强' | '中' | '弱';
+        strategy?: string[];
+        worthTracking?: boolean;
+        tradeValueSummary?: string;
+    };
+    falsificationPoints?: string[];
+    noTradeReason?: string;
+};
+
+function sanitizeReport(
+    report: {
+        summary: string;
+        reasoning?: string[];
+        risks?: string[];
+        professionalAnalysis?: PartialProfessionalAnalysis;
+    }
+): ResearchReport {
+    const professional = report.professionalAnalysis;
     return {
         summary: report.summary.trim(),
         reasoning: (report.reasoning ?? []).map((item) => item.trim()).filter(Boolean),
         risks: (report.risks ?? []).map((item) => item.trim()).filter(Boolean),
+        professionalAnalysis: professional
+            ? {
+                  coreEvent: professional.coreEvent?.trim() ?? '',
+                  newsType: professional.newsType ?? '其他',
+                  signalCategory: professional.signalCategory ?? '情绪噪音',
+                  eventWindow: professional.eventWindow?.trim() ?? '',
+                  impactMechanism: (professional.impactMechanism ?? []).map((item) => item.trim()).filter(Boolean),
+                  impactTerm: professional.impactTerm ?? '短期',
+                  industryImpacts: (professional.industryImpacts ?? [])
+                      .map((item) => ({
+                          industry: item.industry?.trim() ?? '',
+                          sentiment: item.sentiment ?? '中性',
+                          path: item.path?.trim() ?? '',
+                      }))
+                      .filter((item) => item.industry),
+                  chainAnalysis: {
+                      upstream: (professional.chainAnalysis?.upstream ?? []).map((item) => item.trim()).filter(Boolean),
+                      midstream: (professional.chainAnalysis?.midstream ?? []).map((item) => item.trim()).filter(Boolean),
+                      downstream: (professional.chainAnalysis?.downstream ?? []).map((item) => item.trim()).filter(Boolean),
+                      mostBenefitedLink: professional.chainAnalysis?.mostBenefitedLink?.trim() ?? '',
+                      reason: professional.chainAnalysis?.reason?.trim() ?? '',
+                  },
+                  aShareMapping: (professional.aShareMapping ?? [])
+                      .map((item) => ({
+                          stockCode: item.stockCode?.trim() ?? '',
+                          stockName: item.stockName?.trim() ?? '',
+                          companyName: item.companyName?.trim() ?? '',
+                          logic: item.logic?.trim() ?? '',
+                          elasticity: item.elasticity ?? '中',
+                          leaderPotential: item.leaderPotential ?? '中',
+                      }))
+                      .filter((item) => item.companyName || item.stockCode)
+                      .slice(0, 6),
+                  tradingView: {
+                      opportunityType: professional.tradingView?.opportunityType ?? '观察',
+                      sustainability: professional.tradingView?.sustainability ?? '弱',
+                      tradability: professional.tradingView?.tradability ?? '弱',
+                      strategy: (professional.tradingView?.strategy ?? []).map((item) => item.trim()).filter(Boolean),
+                      worthTracking: professional.tradingView?.worthTracking === true,
+                      tradeValueSummary: professional.tradingView?.tradeValueSummary?.trim() ?? '',
+                  },
+                  falsificationPoints: (professional.falsificationPoints ?? []).map((item) => item.trim()).filter(Boolean),
+                  noTradeReason: professional.noTradeReason?.trim() ?? '',
+              }
+            : undefined,
     };
 }
 
@@ -140,7 +261,137 @@ export function buildFallbackReport(input: GenerateReportInput): ResearchReport 
             '当前结论基于试点行业图谱与规则排序，覆盖范围仍有限。',
             '若新闻上下文不完整或别名命中存在歧义，结果可能偏保守。',
         ],
+        professionalAnalysis: {
+            coreEvent: input.rawText.slice(0, 30),
+            newsType: '其他',
+            signalCategory: topStocks.length > 0 ? '短期事件' : '情绪噪音',
+            eventWindow: topStocks.length > 0 ? '预计 1-3 天观察窗口' : '缺少有效窗口',
+            impactMechanism: [],
+            impactTerm: '短期',
+            industryImpacts: [],
+            chainAnalysis: {
+                upstream: [],
+                midstream: [],
+                downstream: [],
+                mostBenefitedLink: '',
+                reason: '',
+            },
+            aShareMapping: topStocks.map((stock) => ({
+                stockCode: stock.stockCode,
+                stockName: stock.stockName,
+                companyName: stock.companyName,
+                logic: stock.reason,
+                elasticity: '中',
+                leaderPotential: '中',
+            })),
+            tradingView: {
+                opportunityType: topStocks.length > 0 ? '观察' : '观察',
+                sustainability: topStocks.length > 0 ? '中' : '弱',
+                tradability: topStocks.length > 0 ? '中' : '弱',
+                strategy: topStocks.length > 0 ? ['观察'] : [],
+                worthTracking: topStocks.length > 0,
+                tradeValueSummary: topStocks.length > 0 ? '可作为观察池跟踪，需等待更强催化。' : '无交易价值，建议等待更明确催化。',
+            },
+            falsificationPoints: ['若后续缺乏增量政策/业绩/订单验证，当前逻辑将迅速衰减。'],
+            noTradeReason: topStocks.length > 0 ? '' : '结构化命中与外部证据不足，无法形成可执行交易信号。',
+        },
     };
+}
+
+function getShadowPromptVersion(version: PromptVersion): PromptVersion {
+    return version === 'v1' ? 'v2' : 'v1';
+}
+
+async function runResearchReportWithVersion(input: GenerateReportInput, version: PromptVersion) {
+    const env = getEnv();
+    const model = createChatModel(0.2);
+    if (!model) {
+        return null;
+    }
+
+    const chain = buildResearchReportPrompt(version).pipe(model.withStructuredOutput(researchReportSchema));
+    const parsed = await withTimeout({
+        operation: `runResearchReportWithVersion:${version}`,
+        timeoutMs: env.OPENAI_REPORT_TIMEOUT_MS,
+        run: () => chain.invoke(buildResearchPromptVariables(input)),
+    });
+    return sanitizeReport(parsed);
+}
+
+function logPromptComparison(input: {
+    baseVersion: PromptVersion;
+    baseReport: ResearchReport;
+    shadowVersion: PromptVersion;
+    shadowReport: ResearchReport;
+}) {
+    const base = input.baseReport.professionalAnalysis;
+    const shadow = input.shadowReport.professionalAnalysis;
+    const baseCodes = new Set((base?.aShareMapping ?? []).map((item) => item.stockCode).filter(Boolean));
+    const shadowCodes = new Set((shadow?.aShareMapping ?? []).map((item) => item.stockCode).filter(Boolean));
+    const onlyBase = [...baseCodes].filter((code) => !shadowCodes.has(code));
+    const onlyShadow = [...shadowCodes].filter((code) => !baseCodes.has(code));
+
+    console.info(
+        `[ai-prof][ab-compare] base=${input.baseVersion} shadow=${input.shadowVersion} ` +
+            `signalCategory=${base?.signalCategory ?? 'n/a'}->${shadow?.signalCategory ?? 'n/a'} ` +
+            `worthTracking=${base?.tradingView.worthTracking ?? false}->${shadow?.tradingView.worthTracking ?? false} ` +
+            `aShareCount=${base?.aShareMapping.length ?? 0}->${shadow?.aShareMapping.length ?? 0} ` +
+            `onlyBaseCodes=${onlyBase.join('|') || '-'} onlyShadowCodes=${onlyShadow.join('|') || '-'}`
+    );
+}
+
+export async function selfCheckResearchReport(input: GenerateReportInput & {report: ResearchReport}): Promise<ResearchReport> {
+    const env = getEnv();
+    if (!env.OPENAI_API_KEY) {
+        return input.report;
+    }
+    const start = Date.now();
+    const providerMeta = getOpenAiProviderMeta();
+    console.info(
+        `[ai-prof] op=selfCheckResearchReport phase=start timeoutMs=${env.OPENAI_REPORT_SELF_CHECK_TIMEOUT_MS} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`
+    );
+
+    try {
+        const model = createChatModel(0);
+        if (!model) {
+            return input.report;
+        }
+
+        const chain = buildResearchSelfCheckPrompt().pipe(model.withStructuredOutput(researchSelfCheckSchema));
+        const check = await withTimeout({
+            operation: 'selfCheckResearchReport',
+            timeoutMs: env.OPENAI_REPORT_SELF_CHECK_TIMEOUT_MS,
+            run: () =>
+                chain.invoke({
+                    ...buildResearchPromptVariables(input),
+                    reportJson: JSON.stringify(input.report),
+                }),
+        });
+        console.info(
+            `[ai-prof] op=selfCheckResearchReport phase=done elapsedMs=${Date.now() - start} needsRevision=${
+                check.needsRevision ? 'true' : 'false'
+            } model=${providerMeta.model} providerHost=${providerMeta.providerHost}`
+        );
+
+        if (!check.needsRevision || !check.revisedReport) {
+            return input.report;
+        }
+
+        return sanitizeReport(check.revisedReport);
+    } catch (error) {
+        if (isTimeoutError(error)) {
+            console.warn(
+                `[ai-prof] op=selfCheckResearchReport phase=timeout elapsedMs=${Date.now() - start} timeoutMs=${env.OPENAI_REPORT_SELF_CHECK_TIMEOUT_MS} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`
+            );
+            return input.report;
+        }
+        console.error(
+            `[ai-prof] op=selfCheckResearchReport phase=error elapsedMs=${Date.now() - start} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`,
+            error
+        );
+        console.error('[ai] self check research report failed:', error);
+        return input.report;
+    }
 }
 
 export async function generateResearchReport(input: GenerateReportInput): Promise<ResearchReport> {
@@ -152,17 +403,57 @@ export async function generateResearchReport(input: GenerateReportInput): Promis
     if (!env.OPENAI_API_KEY) {
         return buildFallbackReport(input);
     }
+    const start = Date.now();
+    const providerMeta = getOpenAiProviderMeta();
+    console.info(
+        `[ai-prof] op=generateResearchReport phase=start timeoutMs=${env.OPENAI_REPORT_TIMEOUT_MS} promptVersion=${env.RESEARCH_REPORT_PROMPT_VERSION} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`
+    );
 
     try {
-        const model = createChatModel(0.2);
-        if (!model) {
+        const activeVersion = env.RESEARCH_REPORT_PROMPT_VERSION;
+        const baseReport = await runResearchReportWithVersion(input, activeVersion);
+        if (!baseReport) {
             return buildFallbackReport(input);
         }
 
-        const chain = buildResearchReportPrompt().pipe(model.withStructuredOutput(researchReportSchema));
-        const parsed = await chain.invoke(buildResearchPromptVariables(input));
-        return sanitizeReport(parsed);
+        const checked = await selfCheckResearchReport({
+            ...input,
+            report: baseReport,
+        });
+        console.info(
+            `[ai-prof] op=generateResearchReport phase=done elapsedMs=${Date.now() - start} reasoningCount=${checked.reasoning.length} riskCount=${checked.risks.length} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`
+        );
+        if (env.RESEARCH_REPORT_AB_COMPARE_ENABLED) {
+            const shadowVersion = getShadowPromptVersion(activeVersion);
+            try {
+                const shadowReport = await runResearchReportWithVersion(input, shadowVersion);
+                if (shadowReport) {
+                    logPromptComparison({
+                        baseVersion: activeVersion,
+                        baseReport: checked,
+                        shadowVersion,
+                        shadowReport,
+                    });
+                }
+            } catch (shadowError) {
+                console.warn(
+                    `[ai-prof][ab-compare] shadow run failed base=${activeVersion} shadow=${shadowVersion}:`,
+                    shadowError
+                );
+            }
+        }
+        return checked;
     } catch (error) {
+        if (isTimeoutError(error)) {
+            console.warn(
+                `[ai-prof] op=generateResearchReport phase=timeout elapsedMs=${Date.now() - start} timeoutMs=${env.OPENAI_REPORT_TIMEOUT_MS} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`
+            );
+            return buildFallbackReport(input);
+        }
+        console.error(
+            `[ai-prof] op=generateResearchReport phase=error elapsedMs=${Date.now() - start} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`,
+            error
+        );
         console.error('[ai] generate report failed:', error);
         try {
             const model = createChatModel(0.2);
@@ -170,7 +461,11 @@ export async function generateResearchReport(input: GenerateReportInput): Promis
                 return buildFallbackReport(input);
             }
 
-            const response = await model.invoke(buildResearchPrompt(input));
+            const response = await withTimeout({
+                operation: 'generateResearchReportFallback',
+                timeoutMs: env.OPENAI_REPORT_TIMEOUT_MS,
+                run: () => model.invoke(buildResearchPrompt(input)),
+            });
             const content =
                 typeof response.content === 'string'
                     ? response.content
@@ -183,8 +478,21 @@ export async function generateResearchReport(input: GenerateReportInput): Promis
             }
 
             const parsed = researchReportSchema.parse(JSON.parse(jsonBlock));
-            return sanitizeReport(parsed);
+            const sanitized = sanitizeReport(parsed);
+            console.info(
+                `[ai-prof] op=generateResearchReport phase=done_fallback elapsedMs=${Date.now() - start} reasoningCount=${sanitized.reasoning.length} riskCount=${sanitized.risks.length} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`
+            );
+            return selfCheckResearchReport({
+                ...input,
+                report: sanitized,
+            });
         } catch (fallbackError) {
+            if (isTimeoutError(fallbackError)) {
+                console.warn(
+                    `[ai-prof] op=generateResearchReport phase=timeout_fallback elapsedMs=${Date.now() - start} timeoutMs=${env.OPENAI_REPORT_TIMEOUT_MS} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`
+                );
+                return buildFallbackReport(input);
+            }
             console.error('[ai] structured report fallback failed:', fallbackError);
             return buildFallbackReport(input);
         }
@@ -192,6 +500,7 @@ export async function generateResearchReport(input: GenerateReportInput): Promis
 }
 
 export async function extractNewsSearchHints(input: {rawText: string}) {
+    const env = getEnv();
     const trimmed = input.rawText.trim();
     if (!trimmed) {
         return {keywords: [] as string[], tags: [] as string[], angle: ''};
@@ -209,7 +518,11 @@ export async function extractNewsSearchHints(input: {rawText: string}) {
         }
 
         const chain = buildNewsSearchHintsPrompt().pipe(model.withStructuredOutput(newsSearchHintsSchema));
-        const result = await chain.invoke({rawText: trimmed});
+        const result = await withTimeout({
+            operation: 'extractNewsSearchHints',
+            timeoutMs: env.OPENAI_HINTS_TIMEOUT_MS,
+            run: () => chain.invoke({rawText: trimmed}),
+        });
         console.info(
             `[ai-prof] op=extractNewsSearchHints phase=done elapsedMs=${Date.now() - start} keywordCount=${
                 result.keywords?.length ?? 0
@@ -222,6 +535,12 @@ export async function extractNewsSearchHints(input: {rawText: string}) {
             angle: (result.angle ?? '').trim(),
         };
     } catch (error) {
+        if (isTimeoutError(error)) {
+            console.warn(
+                `[ai-prof] op=extractNewsSearchHints phase=timeout elapsedMs=${Date.now() - start} timeoutMs=${env.OPENAI_HINTS_TIMEOUT_MS} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`
+            );
+            return {keywords: [] as string[], tags: [] as string[], angle: ''};
+        }
         console.error(
             `[ai-prof] op=extractNewsSearchHints phase=error elapsedMs=${Date.now() - start} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`,
             error
@@ -354,6 +673,19 @@ function inferObservationTypeFromText(rawText: string): ModelObservationType {
     }
 
     return 'event_driver';
+}
+
+function fallbackClassifyNewsType(rawText: string): NewsClassificationType {
+    if (/指数|涨|跌|收涨|收跌|反弹|回落|风险偏好|资金回流|情绪/.test(rawText)) {
+        return 'market_status';
+    }
+    if (/同比|环比|业绩|营收|利润|cpi|ppi|pmi|非农|gdp|数据/.test(rawText)) {
+        return 'data_release';
+    }
+    if (/政策|发布|落地|签约|投产|禁令|制裁|并购|合作|事故|中标/.test(rawText)) {
+        return 'event_driven';
+    }
+    return 'noise';
 }
 
 function normalizeAngleForSearch(angle?: string) {
@@ -497,6 +829,7 @@ export async function generateModelOnlyObservation(input: {
     rawText: string;
     searchKeywords: string[];
     webSearchEvidence: ResearchEvidence[];
+    newsType?: NewsClassificationType;
 }): Promise<ModelObservation> {
     if (input.webSearchEvidence.length === 0) {
         return {
@@ -504,6 +837,12 @@ export async function generateModelOnlyObservation(input: {
             summary: '当前新闻未命中图谱，且缺少足够外部证据，暂时只能做低置信观察。',
             directions: [],
             risks: ['当前判断仅基于原始新闻，未完成图谱验证。'],
+            marketSignal:
+                input.newsType === 'market_status' ? '当前更接近市场结果描述，反映风险偏好与资金风格变化。' : undefined,
+            possibleDrivers: input.newsType === 'market_status' ? [] : undefined,
+            mappedSectors: input.newsType === 'market_status' ? [] : undefined,
+            aShareImpact: input.newsType === 'market_status' ? '对A股更多体现为情绪联动，非确定性基本面催化。' : undefined,
+            tradeValue: input.newsType === 'market_status' ? 'weak' : undefined,
         };
     }
 
@@ -526,6 +865,7 @@ export async function generateModelOnlyObservation(input: {
                 reasoningPaths: [],
                 searchKeywords: input.searchKeywords,
                 webSearchEvidence: input.webSearchEvidence,
+                newsTypeHint: mapNewsClassificationLabel(input.newsType ?? 'event_driven'),
             })
         );
 
@@ -534,6 +874,11 @@ export async function generateModelOnlyObservation(input: {
             summary: result.summary.trim(),
             directions: (result.directions ?? []).map((item) => item.trim()).filter(Boolean),
             risks: (result.risks ?? []).map((item) => item.trim()).filter(Boolean),
+            marketSignal: result.marketSignal?.trim() ?? '',
+            possibleDrivers: (result.possibleDrivers ?? []).map((item) => item.trim()).filter(Boolean),
+            mappedSectors: (result.mappedSectors ?? []).map((item) => item.trim()).filter(Boolean),
+            aShareImpact: result.aShareImpact?.trim() ?? '',
+            tradeValue: result.tradeValue,
         };
     } catch (error) {
         console.error('[ai] generate model-only observation failed:', error);
@@ -542,6 +887,44 @@ export async function generateModelOnlyObservation(input: {
             summary: '当前新闻未命中图谱，但外部搜索显示其更接近市场情绪或主题风格变化，建议先作为观察线索。',
             directions: [],
             risks: ['当前判断依赖模型与外部搜索，未完成图谱验证。'],
+            marketSignal:
+                input.newsType === 'market_status' ? '更接近市场结果描述，指向风险偏好变化而非单一事件冲击。' : undefined,
+            possibleDrivers: input.newsType === 'market_status' ? ['资金流向', '外盘联动', '政策预期'] : undefined,
+            mappedSectors: input.newsType === 'market_status' ? ['科技成长', '互联网平台'] : undefined,
+            aShareImpact: input.newsType === 'market_status' ? '可能带动A股成长风格短线情绪修复。' : undefined,
+            tradeValue: input.newsType === 'market_status' ? 'weak' : undefined,
+        };
+    }
+}
+
+export async function classifyNewsType(input: {rawText: string}): Promise<{type: NewsClassificationType; reason: string}> {
+    const trimmed = input.rawText.trim();
+    if (!trimmed) {
+        return {
+            type: 'noise',
+            reason: '空文本默认视为噪音输入。',
+        };
+    }
+
+    try {
+        const model = createChatModel(0);
+        if (!model) {
+            const type = fallbackClassifyNewsType(trimmed);
+            return {type, reason: '模型不可用，使用规则分类。'};
+        }
+
+        const chain = buildNewsClassificationPrompt().pipe(model.withStructuredOutput(newsClassificationSchema));
+        const result = await chain.invoke({rawText: trimmed});
+        return {
+            type: result.type,
+            reason: (result.reason ?? '').trim(),
+        };
+    } catch (error) {
+        console.error('[ai] classify news type failed:', error);
+        const type = fallbackClassifyNewsType(trimmed);
+        return {
+            type,
+            reason: '分类模型异常，使用规则分类回退。',
         };
     }
 }
@@ -588,6 +971,7 @@ export async function extractMentionedCompanies(input: {
     searchKeywords: string[];
     webSearchEvidence: ResearchEvidence[];
 }): Promise<{companies: MentionedCompany[]; themes: string[]}> {
+    const env = getEnv();
     const trimmed = input.rawText.trim();
     if (!trimmed) {
         return {companies: [], themes: []};
@@ -607,15 +991,20 @@ export async function extractMentionedCompanies(input: {
         }
 
         const chain = buildMentionedCompaniesPrompt().pipe(model.withStructuredOutput(mentionedCompaniesSchema));
-        const result = await chain.invoke(
-            buildResearchPromptVariables({
-                rawText: trimmed,
-                candidateStocks: [],
-                reasoningPaths: [],
-                searchKeywords: input.searchKeywords,
-                webSearchEvidence: input.webSearchEvidence,
-            })
-        );
+        const result = await withTimeout({
+            operation: 'extractMentionedCompanies',
+            timeoutMs: env.OPENAI_MENTION_TIMEOUT_MS,
+            run: () =>
+                chain.invoke(
+                    buildResearchPromptVariables({
+                        rawText: trimmed,
+                        candidateStocks: [],
+                        reasoningPaths: [],
+                        searchKeywords: input.searchKeywords,
+                        webSearchEvidence: input.webSearchEvidence,
+                    })
+                ),
+        });
         console.info(
             `[ai-prof] op=extractMentionedCompanies phase=done elapsedMs=${Date.now() - start} mentionCount=${
                 result.companies?.length ?? 0
@@ -633,6 +1022,12 @@ export async function extractMentionedCompanies(input: {
             themes: [...new Set((result.themes ?? []).map((item) => item.trim()).filter(Boolean))].slice(0, 8),
         };
     } catch (error) {
+        if (isTimeoutError(error)) {
+            console.warn(
+                `[ai-prof] op=extractMentionedCompanies phase=timeout elapsedMs=${Date.now() - start} timeoutMs=${env.OPENAI_MENTION_TIMEOUT_MS} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`
+            );
+            return {companies: [], themes: []};
+        }
         console.error(
             `[ai-prof] op=extractMentionedCompanies phase=error elapsedMs=${Date.now() - start} model=${providerMeta.model} providerHost=${providerMeta.providerHost}`,
             error
